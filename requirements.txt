@@ -4,3 +4,5 @@ python-dotenv
 redis
 PyNaCl
 numpy
+msgpack
+cachetools
