@@ -306,10 +306,11 @@ class TimecardCog(commands.Cog):
                     f"Guild: {interaction.guild.id}, Category: '{category}', Role: '{role}'")
             
             result = await self.clock.clock_in(
-                interaction.guild.id,
-                interaction.user.id,
-                category,
-                role,
+                server_id=interaction.guild.id,
+                user_id=interaction.user.id,
+                category=category,
+                interaction=interaction,
+                role=role,
                 metadata=session_metadata
             )
             
