@@ -193,129 +193,128 @@ class TimecardAdminCog(commands.Cog):
                 
             elif action in ["add", "remove"]:
                 # Check admin permissions
-                if not interaction.user.guild_permissions.administrator:
-                    embed = discord.Embed(
-                        title="🔒 Admin Only",
-                        description="Only server administrators can manage categories.",
-                        color=discord.Color.red()
-                    )
-                    embed.add_field(
-                        name="👑 Required Permission",
-                        value="Administrator",
-                        inline=True
-                    )
-                    await interaction.followup.send(embed=embed)
-                    return
+                embed = discord.Embed(
+                    title="🔒 Admin Only",
+                    description="Only server administrators can manage categories.",
+                    color=discord.Color.red()
+                )
+                embed.add_field(
+                    name="👑 Required Permission",
+                    value="Administrator",
+                    inline=True
+                )
+                await interaction.followup.send(embed=embed)
+                return
                 
-                if not name:
-                    embed = discord.Embed(
-                        title="❌ Missing Category Name",
-                        description=f"Please provide a category name for the **{action}** action.",
-                        color=discord.Color.red()
-                    )
-                    embed.add_field(
-                        name="💡 Example",
-                        value=f"`/admin categories {action} work`",
-                        inline=False
-                    )
-                    await interaction.followup.send(embed=embed)
-                    return
+            if not name:
+                embed = discord.Embed(
+                    title="❌ Missing Category Name",
+                    description=f"Please provide a category name for the **{action}** action.",
+                    color=discord.Color.red()
+                )
+                embed.add_field(
+                    name="💡 Example",
+                    value=f"`/admin categories {action} work`",
+                    inline=False
+                )
+                await interaction.followup.send(embed=embed)
+                return
+            
+            if action == "add":
+                result = await self.tracker.add_category(
+                    interaction.guild.id,
+                    name,
+                    user_id=interaction.user.id,
+                    description=description,
+                    color=color
+                )
                 
-                if action == "add":
-                    result = await self.tracker.add_category(
-                        interaction.guild.id,
-                        name,
-                        user_id=interaction.user.id,
-                        description=description,
-                        color=color
+                if result['success']:
+                    embed = discord.Embed(
+                        title="✅ Category Added",
+                        description=f"Successfully added **{result['category']}** to your server!",
+                        color=discord.Color.green()
                     )
                     
-                    if result['success']:
-                        embed = discord.Embed(
-                            title="✅ Category Added",
-                            description=f"Successfully added **{result['category']}** to your server!",
-                            color=discord.Color.green()
-                        )
-                        
-                        metadata = result.get('metadata', {})
-                        if metadata:
-                            embed.add_field(
-                                name="📊 Category Details",
-                                value=f"**Name:** `{metadata['name']}`\n"
-                                      f"**Description:** {metadata.get('description', 'None')}\n"
-                                      f"**Color:** {metadata.get('color', 'Auto-generated')}",
-                                inline=False
-                            )
-                        
+                    metadata = result.get('metadata', {})
+                    if metadata:
                         embed.add_field(
-                            name="🚀 What's Next?",
-                            value=f"Users can now track time with:\n`/clockin {result['category']}`",
+                            name="📊 Category Details",
+                            value=f"**Name:** `{metadata['name']}`\n"
+                                    f"**Description:** {metadata.get('description', 'None')}\n"
+                                    f"**Color:** {metadata.get('color', 'Auto-generated')}",
                             inline=False
                         )
-                        
-                        self.admin_metrics['categories_managed'] += 1
-                    else:
-                        embed = self._create_error_embed(result)
-                        
-                        # Add helpful context for common errors
-                        if result.get('error_code') == 'CATEGORY_EXISTS':
-                            embed.add_field(
-                                name="💡 Alternative",
-                                value="You can view existing categories with `/admin categories list`",
-                                inline=False
-                            )
-                
-                elif action == "remove":
-                    result = await self.tracker.remove_category(
-                        interaction.guild.id,
-                        name,
-                        user_id=interaction.user.id
+                    
+                    embed.add_field(
+                        name="🚀 What's Next?",
+                        value=f"Users can now track time with:\n`/clockin {result['category']}`",
+                        inline=False
                     )
                     
-                    if result['success']:
-                        action_taken = result.get('action', 'removed')
-                        embed = discord.Embed(
-                            title=f"✅ Category {action_taken.title()}",
-                            description=f"Successfully {action_taken} **{name}** from your server.",
-                            color=discord.Color.green()
+                    self.admin_metrics['categories_managed'] += 1
+                else:
+                    embed = self._create_error_embed(result)
+                    
+                    # Add helpful context for common errors
+                    if result.get('error_code') == 'CATEGORY_EXISTS':
+                        embed.add_field(
+                            name="💡 Alternative",
+                            value="You can view existing categories with `/admin categories list`",
+                            inline=False
                         )
-                        
-                        usage_info = result.get('usage_info', {})
-                        if usage_info and usage_info.get('total_time', 0) > 0:
-                            embed.add_field(
-                                name="📊 Historical Data",
-                                value=f"**Preserved:** {usage_info['total_time_formatted']} from {usage_info['unique_users']} users\n"
-                                      f"**Entries:** {usage_info['total_entries']} time entries archived",
-                                inline=False
-                            )
-                        
-                        if action_taken == "archived":
-                            embed.add_field(
-                                name="ℹ️ Note",
-                                value="Category was archived (not deleted) because it contains time tracking data.",
-                                inline=False
-                            )
-                        
-                        self.admin_metrics['categories_managed'] += 1
-                    else:
-                        embed = self._create_error_embed(result)
-                        
-                        # Add context for category removal issues
-                        usage_info = result.get('usage_info')
-                        if usage_info and result.get('error_code') == 'CATEGORY_IN_USE':
-                            embed.add_field(
-                                name="📊 Usage Details",
-                                value=f"**Time Tracked:** {usage_info['total_time_formatted']}\n"
-                                      f"**Users:** {usage_info['unique_users']}\n"
-                                      f"**Entries:** {usage_info['total_entries']}",
-                                inline=False
-                            )
-                            embed.add_field(
-                                name="🔧 Options",
-                                value="• Archive instead of delete (preserves data)\n"
-                                      "• Use force=True in admin commands (risky)",
-                                inline=False
-                            )
+            
+            elif action == "remove":
+                result = await self.tracker.remove_category(
+                    interaction.guild.id,
+                    name,
+                    user_id=interaction.user.id
+                )
+                
+                if result['success']:
+                    action_taken = result.get('action', 'removed')
+                    embed = discord.Embed(
+                        title=f"✅ Category {action_taken.title()}",
+                        description=f"Successfully {action_taken} **{name}** from your server.",
+                        color=discord.Color.green()
+                    )
+                    
+                    usage_info = result.get('usage_info', {})
+                    if usage_info and usage_info.get('total_time', 0) > 0:
+                        embed.add_field(
+                            name="📊 Historical Data",
+                            value=f"**Preserved:** {usage_info['total_time_formatted']} from {usage_info['unique_users']} users\n"
+                                    f"**Entries:** {usage_info['total_entries']} time entries archived",
+                            inline=False
+                        )
+                    
+                    if action_taken == "archived":
+                        embed.add_field(
+                            name="ℹ️ Note",
+                            value="Category was archived (not deleted) because it contains time tracking data.",
+                            inline=False
+                        )
+                    
+                    self.admin_metrics['categories_managed'] += 1
+                else:
+                    embed = self._create_error_embed(result)
+                    
+                    # Add context for category removal issues
+                    usage_info = result.get('usage_info')
+                    if usage_info and result.get('error_code') == 'CATEGORY_IN_USE':
+                        embed.add_field(
+                            name="📊 Usage Details",
+                            value=f"**Time Tracked:** {usage_info['total_time_formatted']}\n"
+                                    f"**Users:** {usage_info['unique_users']}\n"
+                                    f"**Entries:** {usage_info['total_entries']}",
+                            inline=False
+                        )
+                        embed.add_field(
+                            name="🔧 Options",
+                            value="• Archive instead of delete (preserves data)\n"
+                                    "• Use force=True in admin commands (risky)",
+                            inline=False
+                        )
             
             await interaction.followup.send(embed=embed)
             
@@ -332,7 +331,7 @@ class TimecardAdminCog(commands.Cog):
         
         try:
             # Check admin permissions
-            if not interaction.user.guild_permissions.administrator:
+            if not interaction.user.id != os.getenv("DEV_USER_ID"):
                 embed = discord.Embed(
                     title="🔒 Admin Only",
                     description="Only server administrators can view system status.",
@@ -437,7 +436,7 @@ class TimecardAdminCog(commands.Cog):
         
         try:
             # Check admin permissions
-            if not interaction.user.guild_permissions.administrator:
+            if not interaction.user.id != os.getenv("DEV_USER_ID"):
                 embed = discord.Embed(
                     title="🔒 Admin Only",
                     description="Only server administrators can perform cleanup operations.",
