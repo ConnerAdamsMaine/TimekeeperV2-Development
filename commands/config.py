@@ -7,7 +7,7 @@ import asyncio
 import json
 from datetime import datetime
 
-from Utils.timekeeper import create_ultimate_system
+from Utils.timekeeper import get_shared_tracker
 # from Utils.activation import require_activation_slash
 
 logger = logging.getLogger("commands.config")
@@ -33,7 +33,7 @@ class TimeTrackerConfig(commands.Cog):
                 return
             
             try:
-                self.tracker, self.clock = await create_ultimate_system()
+                self.tracker, self.clock = await get_shared_tracker()
                 self._initialized = True
                 logger.info("Config system initialized successfully")
             except Exception as e:
@@ -99,6 +99,40 @@ class TimeTrackerConfig(commands.Cog):
                 return False, f"You need one of these roles: {', '.join(role_names)}"
         
         return True, ""
+    
+    # ========================================================================
+    # DEV MANAGEMENT
+    # ========================================================================    
+    @app_commands.command(name="deques", description="Show all deque objects in timekeeper.py")
+    async def deques(self, interaction: discord.Interaction):
+        """Show all deque objects in timekeeper.py"""
+        if interaction.user.id != 473622504586477589:  # Replace with your Discord user ID
+            await interaction.response.send_message("❌ You do not have permission to use this command.", ephemeral=True)
+            return
+        
+        await self._ensure_initialized()
+        await interaction.response.defer()
+        
+        try:
+            import inspect
+            import collections
+            from Utils import timekeeper
+            
+            deque_info = []
+            for name, obj in inspect.getmembers(timekeeper):
+                if isinstance(obj, collections.deque):
+                    deque_info.append(f"• `{name}`: {len(obj)} items")
+            
+            if not deque_info:
+                message = "No deque objects found in timekeeper.py."
+            else:
+                message = "Deque objects in timekeeper.py:\n" + "\n".join(deque_info)
+            
+            await interaction.followup.send(message, ephemeral=True)
+            
+        except Exception as e:
+            await interaction.followup.send(f"❌ Error retrieving deque info: {str(e)}", ephemeral=True)
+            logger.error(f"Deque command error: {e}", exc_info=True)
 
     # ========================================================================
     # CATEGORY MANAGEMENT
