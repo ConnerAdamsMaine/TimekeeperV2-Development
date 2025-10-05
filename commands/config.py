@@ -334,7 +334,7 @@ class TimeTrackerConfig(commands.Cog):
         
         if view.confirmed:
             try:
-                await self.tracker.remove_category(interaction.guild.id, category, remove_user_data=True)
+                await self.tracker.remove_category(interaction.guild.id, category, force=True)
                 
                 embed = discord.Embed(
                     title="🗑️ Category Removed",
@@ -369,7 +369,7 @@ class TimeTrackerConfig(commands.Cog):
             await interaction.followup.send("❌ Please specify a user!", ephemeral=True)
             return
         
-        user_stats = await self.tracker.get_user_stats(interaction.guild.id, user.id)
+        user_stats = await self.tracker.get_user_times(interaction.guild.id, user.id)
         
         embed = discord.Embed(
             title=f"📊 Stats for {user.display_name}",
