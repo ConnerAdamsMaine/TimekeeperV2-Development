@@ -5,6 +5,7 @@ import logging
 from typing import Optional, Dict, Any, List
 import asyncio
 from datetime import datetime, timedelta
+import os
 # from Utils.activation import require_activation_slash
 
 from Utils.timekeeper import (
@@ -96,7 +97,7 @@ class TimecardAdminCog(commands.Cog):
     
     admin_group = app_commands.Group(name="admin", description="👑 Administrative commands for timecard system")
     
-    @admin_group.command(name="categories", description="👑 Manage server time tracking categories (Admin Only)")
+    @admin_group.command(name="categories", description="👑 Manage server time tracking categories (Dev Only)")
     @app_commands.describe(
         action="Action to perform (list, add, remove)",
         name="Category name (for add/remove actions)",
@@ -114,6 +115,12 @@ class TimecardAdminCog(commands.Cog):
                               color: Optional[str] = None):
         """Server-controlled category management command"""
         await interaction.response.defer()
+        if interaction.user.id != os.getenv("DEV_USER_ID"):
+            await interaction.followup.send(embed=discord.Embed(
+                title="🔒 Developer Only",
+                description="This command is currently restricted to the developer.",
+                color=discord.Color.red()
+            ))
         
         try:
             await self._ensure_initialized()

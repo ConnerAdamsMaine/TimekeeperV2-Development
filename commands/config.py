@@ -248,7 +248,7 @@ class TimeTrackerConfig(commands.Cog):
 
     async def _handle_list_categories(self, interaction: discord.Interaction):
         """List all categories"""
-        categories = await self.tracker.get_server(interaction.guild.id)
+        categories = await self.tracker.list_categories(interaction.guild.id)
         
         if categories:
             embed = discord.Embed(
