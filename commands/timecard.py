@@ -245,7 +245,7 @@ class TimecardCog(commands.Cog):
             
             # LOG: Category validation
             logger.debug(f"[CLOCKIN] Validating if category '{category}' exists in server categories")
-            if category not in categories_info:
+            if category.lower().strip() not in categories_info:
                 logger.warning(f"[CLOCKIN] Category '{category}' not found in guild {interaction.guild.id}. "
                             f"Available: {list(categories_info.keys())}")
                 

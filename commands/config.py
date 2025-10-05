@@ -148,7 +148,6 @@ class TimeTrackerConfig(commands.Cog):
     @app_commands.choices(action=[
         app_commands.Choice(name="📋 List Categories", value="list_categories"),
         app_commands.Choice(name="➕ Add Category", value="add_category"),
-        app_commands.Choice(name="🔄 Rename Category", value="rename_category"),
         app_commands.Choice(name="🗑️ Remove Category", value="remove_category"),
         app_commands.Choice(name="👤 User Stats", value="user_stats"),
         app_commands.Choice(name="⏰ Set User Time", value="set_user_time"),
@@ -196,8 +195,6 @@ class TimeTrackerConfig(commands.Cog):
                 await self._handle_list_categories(interaction)
             elif action == "add_category":
                 await self._handle_add_category(interaction, category)
-            elif action == "rename_category":
-                await self._handle_rename_category(interaction, category, value)
             elif action == "remove_category":
                 await self._handle_remove_category(interaction, category)
             elif action == "user_stats":
@@ -291,27 +288,6 @@ class TimeTrackerConfig(commands.Cog):
             
         except Exception as e:
             await interaction.followup.send(f"❌ Failed to add category: {str(e)}", ephemeral=True)
-
-    async def _handle_rename_category(self, interaction: discord.Interaction, old_name: str, new_name: str):
-        """Rename a category"""
-        if not old_name or not new_name:
-            await interaction.followup.send("❌ Please provide both old and new category names!\nUsage: `/config rename_category category:old_name value:new_name`", ephemeral=True)
-            return
-        
-        try:
-            await self.tracker.rename_category(interaction.guild.id, old_name, new_name)
-            
-            embed = discord.Embed(
-                title="🔄 Category Renamed",
-                description=f"Renamed `{old_name}` → `{new_name}`",
-                color=discord.Color.green()
-            )
-            await interaction.followup.send(embed=embed)
-            
-            logger.info(f"Admin {interaction.user.id} renamed category '{old_name}' to '{new_name}' in server {interaction.guild.id}")
-            
-        except Exception as e:
-            await interaction.followup.send(f"❌ Failed to rename category: {str(e)}", ephemeral=True)
 
     async def _handle_remove_category(self, interaction: discord.Interaction, category: str):
         """Remove a category"""
