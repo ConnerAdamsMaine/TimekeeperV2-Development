@@ -1,3 +1,4 @@
+
 django
 discord.py
 python-dotenv
@@ -6,3 +7,5 @@ PyNaCl
 numpy
 msgpack
 cachetools
+reportlab
+python-docx
