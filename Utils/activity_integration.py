@@ -5,7 +5,7 @@ This module provides functions to log clock in/out activities
 
 import logging
 from typing import Optional, Dict, Any
-import CusModules.discord as discord
+import discord 
 
 logger = logging.getLogger(__name__)
 

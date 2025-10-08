@@ -1,6 +1,6 @@
-import CusModules.discord as discord
-from CusModules.discord import app_commands
-from CusModules.discord.ext import commands
+import discord 
+from discord import app_commands
+from discord.ext import commands
 from typing import Optional, List, Dict, Any
 import logging
 import asyncio
@@ -720,11 +720,11 @@ class TimeTrackerConfig(commands.Cog):
         """Show leaderboard"""
         if category:
             # Category-specific leaderboard
-            leaderboard = await self.tracker.get_fast_leaderboard(interaction.guild.id, category, 10)
+            leaderboard = await self.tracker.get_server_leaderboard(interaction.guild.id, category, 10)
             title = f"🏆 {category.title()} Leaderboard"
         else:
             # Total time leaderboard
-            leaderboard = await self.tracker.get_fast_leaderboard(interaction.guild.id, None, 10)
+            leaderboard = await self.tracker.get_server_leaderboard(interaction.guild.id, None, 10)
             title = "🏆 Total Time Leaderboard"
         
         if not leaderboard:

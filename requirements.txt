@@ -1,3 +1,4 @@
+discord.py
 django
 python-dotenv
 redis

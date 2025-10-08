@@ -1,6 +1,6 @@
-import CusModules.discord as discord
-from CusModules.discord.ext import commands, tasks
-from CusModules.discord import app_commands
+import discord 
+from discord.ext import commands, tasks
+from discord import app_commands
 import logging
 from typing import Optional, Dict, Any, List
 import asyncio

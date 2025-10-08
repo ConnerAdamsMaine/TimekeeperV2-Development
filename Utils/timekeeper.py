@@ -3,8 +3,8 @@ import redis.asyncio as redis
 from typing import Dict, Optional, List, Set, Any, Tuple, Union, Callable
 import logging
 from datetime import datetime, timedelta
-import CusModules.discord as discord
-from CusModules.discord import utils
+import discord 
+from discord import utils
 import json
 import os
 import time
@@ -3472,7 +3472,7 @@ class UltimateClockManager:
                 'role_id': None,
                 'metadata': metadata or {},
                 'checkpoints': [],
-                'ip_hash': None,  # Could be populated from CusModules.discord context
+                'ip_hash': None,  # Could be populated from discord context
                 'client_info': {
                     'platform': 'discord',
                     'version': '1.0'

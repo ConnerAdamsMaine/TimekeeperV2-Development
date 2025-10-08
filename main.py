@@ -2,7 +2,7 @@ import argparse
 import os
 from dotenv import load_dotenv
 import logging
-import CusModules.discord as discord
+import discord 
 import tkinter as tk
 
 from Core.Bot import Bot
