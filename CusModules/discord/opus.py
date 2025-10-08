@@ -35,7 +35,7 @@ import os.path
 import struct
 import sys
 
-from .errors import DiscordException
+from .errors import CusModules.discord as discordException
 
 if TYPE_CHECKING:
     T = TypeVar('T')

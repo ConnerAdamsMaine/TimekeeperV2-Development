@@ -28,7 +28,7 @@ import struct
 
 from typing import TYPE_CHECKING, ClassVar, IO, Generator, Tuple, Optional
 
-from .errors import DiscordException
+from .errors import CusModules.discord as discordException
 
 __all__ = (
     'OggError',

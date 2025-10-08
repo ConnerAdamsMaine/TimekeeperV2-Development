@@ -52,7 +52,7 @@ import datetime
 import aiohttp
 
 from .errors import HTTPException, RateLimited, Forbidden, NotFound, LoginFailure, DiscordServerError, GatewayNotFound
-from .gateway import DiscordClientWebSocketResponse
+from .gateway import CusModules.discord as discordClientWebSocketResponse
 from .file import File
 from .mentions import AllowedMentions
 from . import __version__, utils

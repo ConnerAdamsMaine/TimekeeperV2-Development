@@ -104,8 +104,8 @@ class ActionRow(Item[V]):
 
     .. code-block:: python3
 
-        import discord
-        from discord import ui
+        import CusModules.discord as discord
+        from CusModules.discord import ui
 
         # you can subclass it and add components with the decorators
         class MyActionRow(ui.ActionRow):

@@ -27,7 +27,7 @@ from __future__ import annotations
 import io
 import os
 from typing import Any, Literal, Optional, TYPE_CHECKING, Tuple, Union
-from .errors import DiscordException
+from .errors import CusModules.discord as discordException
 from . import utils
 from .file import File
 

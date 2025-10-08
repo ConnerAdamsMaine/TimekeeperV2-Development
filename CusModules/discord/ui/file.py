@@ -55,8 +55,8 @@ class File(Item[V]):
 
     .. code-block:: python3
 
-        import discord
-        from discord import ui
+        import CusModules.discord as discord
+        from CusModules.discord import ui
 
         class MyView(ui.LayoutView):
             file = ui.File('attachment://file.txt')

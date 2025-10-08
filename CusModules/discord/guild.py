@@ -935,7 +935,7 @@ class Guild(Hashable):
     @property
     def public_updates_channel(self) -> Optional[TextChannel]:
         """Optional[:class:`TextChannel`]: Return's the guild's channel where admins and
-        moderators of the guilds receive notices from Discord. The guild must be a
+        moderators of the guilds receive notices from CusModules.discord. The guild must be a
         Community guild.
 
         If no channel is set, then this returns ``None``.
@@ -2118,7 +2118,7 @@ class Guild(Hashable):
 
             .. versionadded:: 1.4
         public_updates_channel: Optional[:class:`TextChannel`]
-            The new channel that is used for public updates from Discord. This is only available to
+            The new channel that is used for public updates from CusModules.discord. This is only available to
             guilds that contain ``COMMUNITY`` in :attr:`Guild.features`. Could be ``None`` for no
             public updates channel.
 
@@ -2406,7 +2406,7 @@ class Guild(Hashable):
         Raises
         -------
         InvalidData
-            An unknown channel type was received from Discord.
+            An unknown channel type was received from CusModules.discord.
         HTTPException
             Retrieving the channels failed.
 
@@ -2605,7 +2605,7 @@ class Guild(Hashable):
         Raises
         -------
         InvalidData
-            An unknown channel type was received from Discord
+            An unknown channel type was received from CusModules.discord
             or the guild the channel belongs to is not the same
             as the one in this object points to.
         HTTPException

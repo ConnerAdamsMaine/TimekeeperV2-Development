@@ -48,7 +48,7 @@ from typing import TYPE_CHECKING, Any, Callable, Tuple, Type, Optional, List, Di
 
 if TYPE_CHECKING:
     from typing_extensions import Unpack
-    from .gateway import DiscordWebSocket
+    from .gateway import CusModules.discord as discordWebSocket
     from .activity import BaseActivity
     from .flags import Intents
     from .types.gateway import SessionStartLimit

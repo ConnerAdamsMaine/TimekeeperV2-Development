@@ -89,7 +89,7 @@ if TYPE_CHECKING:
     from .guild import GuildChannel
     from .http import HTTPClient
     from .voice_client import VoiceProtocol
-    from .gateway import DiscordWebSocket
+    from .gateway import CusModules.discord as discordWebSocket
     from .ui.item import Item
     from .ui.dynamic import DynamicItem
     from .app_commands import CommandTree, Translator

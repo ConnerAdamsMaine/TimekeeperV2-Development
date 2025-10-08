@@ -51,7 +51,7 @@ from .enums import Enum
 from .utils import MISSING, sane_wait_for
 from .errors import ConnectionClosed
 from .backoff import ExponentialBackoff
-from .gateway import DiscordVoiceWebSocket
+from .gateway import CusModules.discord as discordVoiceWebSocket
 
 if TYPE_CHECKING:
     from . import abc

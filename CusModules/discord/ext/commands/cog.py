@@ -25,10 +25,10 @@ DEALINGS IN THE SOFTWARE.
 from __future__ import annotations
 
 import inspect
-import discord
+import CusModules.discord as discord
 import logging
-from discord import app_commands
-from discord.utils import maybe_coroutine, _to_kebab_case
+from CusModules.discord import app_commands
+from CusModules.discord.utils import maybe_coroutine, _to_kebab_case
 
 from typing import (
     Any,
@@ -52,8 +52,8 @@ from ._types import _BaseCommand, BotT
 
 if TYPE_CHECKING:
     from typing_extensions import Self, Unpack
-    from discord.abc import Snowflake
-    from discord._types import ClientT
+    from CusModules.discord.abc import Snowflake
+    from CusModules.discord._types import ClientT
 
     from .bot import BotBase
     from .context import Context
@@ -809,8 +809,8 @@ class GroupCog(Cog):
 
     .. code-block:: python3
 
-        from discord import app_commands
-        from discord.ext import commands
+        from CusModules.discord import app_commands
+        from CusModules.discord.ext import commands
 
         @app_commands.guild_only()
         class MyCog(commands.GroupCog, group_name='my-cog'):

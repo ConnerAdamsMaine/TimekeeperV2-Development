@@ -27,10 +27,10 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any, Dict, Generator, Generic, List, Optional, TypeVar, Union, Sequence, Type, overload
 
-import discord.abc
-import discord.utils
-from discord import Interaction, Message, Attachment, MessageType, User, PartialMessageable, Permissions, ChannelType, Thread
-from discord.context_managers import Typing
+import CusModules.discord as discord.abc
+import CusModules.discord as discord.utils
+from CusModules.discord import Interaction, Message, Attachment, MessageType, User, PartialMessageable, Permissions, ChannelType, Thread
+from CusModules.discord.context_managers import Typing
 from .view import StringView
 
 from ._types import BotT
@@ -38,20 +38,20 @@ from ._types import BotT
 if TYPE_CHECKING:
     from typing_extensions import Self, ParamSpec, TypeGuard
 
-    from discord.abc import MessageableChannel
-    from discord.guild import Guild
-    from discord.member import Member
-    from discord.state import ConnectionState
-    from discord.user import ClientUser
-    from discord.voice_client import VoiceProtocol
-    from discord.embeds import Embed
-    from discord.file import File
-    from discord.mentions import AllowedMentions
-    from discord.sticker import GuildSticker, StickerItem
-    from discord.message import MessageReference, PartialMessage
-    from discord.ui.view import BaseView, View, LayoutView
-    from discord.types.interactions import ApplicationCommandInteractionData
-    from discord.poll import Poll
+    from CusModules.discord.abc import MessageableChannel
+    from CusModules.discord.guild import Guild
+    from CusModules.discord.member import Member
+    from CusModules.discord.state import ConnectionState
+    from CusModules.discord.user import ClientUser
+    from CusModules.discord.voice_client import VoiceProtocol
+    from CusModules.discord.embeds import Embed
+    from CusModules.discord.file import File
+    from CusModules.discord.mentions import AllowedMentions
+    from CusModules.discord.sticker import GuildSticker, StickerItem
+    from CusModules.discord.message import MessageReference, PartialMessage
+    from CusModules.discord.ui.view import BaseView, View, LayoutView
+    from CusModules.discord.types.interactions import ApplicationCommandInteractionData
+    from CusModules.discord.poll import Poll
 
     from .cog import Cog
     from .core import Command

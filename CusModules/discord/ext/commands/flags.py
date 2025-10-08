@@ -30,7 +30,7 @@ import sys
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Literal, Optional, Pattern, Set, Tuple, Type, Union
 
-from discord.utils import MISSING, maybe_coroutine, resolve_annotation
+from CusModules.discord.utils import MISSING, maybe_coroutine, resolve_annotation
 
 from .converter import run_converters
 from .errors import BadFlagArgument, MissingFlagArgument, MissingRequiredFlag, TooManyFlags, TooManyArguments

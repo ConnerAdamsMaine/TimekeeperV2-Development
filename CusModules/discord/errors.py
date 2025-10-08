@@ -200,7 +200,7 @@ class DiscordServerError(HTTPException):
 
 class InvalidData(ClientException):
     """Exception that's raised when the library encounters unknown
-    or invalid data from Discord.
+    or invalid data from CusModules.discord.
     """
 
     pass

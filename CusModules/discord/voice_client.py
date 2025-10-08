@@ -37,7 +37,7 @@ from .utils import MISSING
 from .voice_state import VoiceConnectionState
 
 if TYPE_CHECKING:
-    from .gateway import DiscordVoiceWebSocket
+    from .gateway import CusModules.discord as discordVoiceWebSocket
     from .client import Client
     from .guild import Guild
     from .state import ConnectionState

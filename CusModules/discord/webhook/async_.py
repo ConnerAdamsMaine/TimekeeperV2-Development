@@ -1106,7 +1106,7 @@ class Webhook(BaseWebhook):
 
     .. code-block:: python3
 
-        from discord import Webhook
+        from CusModules.discord import Webhook
         import aiohttp
 
         async def foo():

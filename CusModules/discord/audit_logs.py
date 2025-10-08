@@ -499,7 +499,7 @@ class AuditLogChanges:
             return
 
         # avoid circular import
-        from discord.app_commands import AppCommandPermissions
+        from CusModules.discord.app_commands import AppCommandPermissions
 
         state = entry._state
         guild = entry.guild

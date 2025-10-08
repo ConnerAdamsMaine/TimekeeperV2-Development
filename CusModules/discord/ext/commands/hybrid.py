@@ -26,10 +26,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Dict, List, Tuple, Type, TypeVar, Union, Optional
 
-import discord
+import CusModules.discord as discord
 import inspect
-from discord import app_commands
-from discord.utils import MISSING, maybe_coroutine, async_all
+from CusModules.discord import app_commands
+from CusModules.discord.utils import MISSING, maybe_coroutine, async_all
 from .core import Command, Group
 from .errors import BadArgument, CommandRegistrationError, CommandError, HybridCommandError, ConversionError, DisabledCommand
 from .converter import Converter, Range, Greedy, run_converters, CONVERTER_MAPPING
@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     from ._types import ContextT, Coro, BotT
     from .bot import Bot
     from .context import Context
-    from discord.app_commands.commands import (
+    from CusModules.discord.app_commands.commands import (
         Check as AppCommandCheck,
         AutocompleteCallback,
         ChoiceT,

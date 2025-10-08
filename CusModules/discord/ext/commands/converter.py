@@ -45,13 +45,13 @@ from typing import (
 )
 import types
 
-import discord
+import CusModules.discord as discord
 
 from .errors import *
 
 if TYPE_CHECKING:
-    from discord.state import Channel
-    from discord.threads import Thread
+    from CusModules.discord.state import Channel
+    from CusModules.discord.threads import Thread
 
     from .parameters import Parameter
     from ._types import BotT, _Bot

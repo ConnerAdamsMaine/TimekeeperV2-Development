@@ -45,7 +45,7 @@ from typing import (
 )
 import datetime
 
-import discord.abc
+import CusModules.discord as discord.abc
 from .scheduled_event import ScheduledEvent
 from .permissions import PermissionOverwrite, Permissions
 from .enums import (

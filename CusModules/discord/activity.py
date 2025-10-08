@@ -585,7 +585,7 @@ class Streaming(BaseActivity):
 
 
 class Spotify:
-    """Represents a Spotify listening activity from Discord. This is a special case of
+    """Represents a Spotify listening activity from CusModules.discord. This is a special case of
     :class:`Activity` that makes it easier to work with the Spotify integration.
 
     .. container:: operations
@@ -758,7 +758,7 @@ class Spotify:
 
 
 class CustomActivity(BaseActivity):
-    """Represents a custom activity from Discord.
+    """Represents a custom activity from CusModules.discord.
 
     .. container:: operations
 

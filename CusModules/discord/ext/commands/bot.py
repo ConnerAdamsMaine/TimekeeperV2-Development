@@ -50,10 +50,10 @@ from typing import (
     overload,
 )
 
-import discord
-from discord import app_commands
-from discord.app_commands.tree import _retrieve_guild_ids
-from discord.utils import MISSING, _is_submodule
+import CusModules.discord as discord
+from CusModules.discord import app_commands
+from CusModules.discord.app_commands.tree import _retrieve_guild_ids
+from CusModules.discord.utils import MISSING, _is_submodule
 
 from .core import GroupMixin
 from .view import StringView
@@ -68,9 +68,9 @@ if TYPE_CHECKING:
 
     import importlib.machinery
 
-    from discord.message import Message
-    from discord.interactions import Interaction
-    from discord.abc import User, Snowflake
+    from CusModules.discord.message import Message
+    from CusModules.discord.interactions import Interaction
+    from CusModules.discord.abc import User, Snowflake
     from ._types import (
         _Bot,
         BotT,
@@ -81,8 +81,8 @@ if TYPE_CHECKING:
     )
     from .core import Command
     from .hybrid import CommandCallback, ContextT, P, _HybridCommandDecoratorKwargs, _HybridGroupDecoratorKwargs
-    from discord.client import _ClientOptions
-    from discord.shard import _AutoShardedClientOptions
+    from CusModules.discord.client import _ClientOptions
+    from CusModules.discord.shard import _AutoShardedClientOptions
 
     _Prefix = Union[Iterable[str], str]
     _PrefixCallable = MaybeAwaitableFunc[[BotT, Message], _Prefix]

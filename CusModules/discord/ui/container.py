@@ -87,8 +87,8 @@ class Container(Item[V]):
 
     .. code-block:: python3
 
-        import discord
-        from discord import ui
+        import CusModules.discord as discord
+        from CusModules.discord import ui
 
         # you can subclass it and add components as you would add them
         # in a LayoutView

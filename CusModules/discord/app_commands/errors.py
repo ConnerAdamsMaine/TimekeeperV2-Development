@@ -27,7 +27,7 @@ from __future__ import annotations
 from typing import Any, TYPE_CHECKING, List, Optional, Sequence, Union
 
 from ..enums import AppCommandOptionType, AppCommandType, Locale
-from ..errors import DiscordException, HTTPException, _flatten_error_dict, MissingApplicationID as MissingApplicationID
+from ..errors import CusModules.discord as discordException, HTTPException, _flatten_error_dict, MissingApplicationID as MissingApplicationID
 from ..utils import _human_join
 
 __all__ = (
@@ -391,10 +391,10 @@ class CommandLimitReached(AppCommandError):
 
 
 class CommandSignatureMismatch(AppCommandError):
-    """An exception raised when an application command from Discord has a different signature
+    """An exception raised when an application command from CusModules.discord has a different signature
     from the one provided in the code. This happens because your command definition differs
     from the command definition you provided Discord. Either your code is out of date or the
-    data from Discord is out of sync.
+    data from CusModules.discord is out of sync.
 
     This inherits from :exc:`~discord.app_commands.AppCommandError`.
 

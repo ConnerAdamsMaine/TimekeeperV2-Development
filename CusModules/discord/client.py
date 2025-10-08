@@ -692,7 +692,7 @@ class Client:
         """|coro|
 
         Creates a websocket connection and lets the websocket listen
-        to messages from Discord. This is a loop that runs the entire
+        to messages from CusModules.discord. This is a loop that runs the entire
         event system and miscellaneous aspects of the library. Control
         is not resumed until the WebSocket connection is terminated.
 
@@ -2649,7 +2649,7 @@ class Client:
         Raises
         -------
         InvalidData
-            An unknown channel type was received from Discord.
+            An unknown channel type was received from CusModules.discord.
         HTTPException
             Retrieving the channel failed.
         NotFound

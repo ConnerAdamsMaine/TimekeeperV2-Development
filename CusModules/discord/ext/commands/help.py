@@ -45,7 +45,7 @@ from typing import (
     TypedDict,
 )
 
-import discord.utils
+import CusModules.discord as discord.utils
 
 from .core import Group, Command, get_signature_parameters
 from .errors import CommandError
@@ -53,7 +53,7 @@ from .errors import CommandError
 if TYPE_CHECKING:
     from typing_extensions import Self, Unpack
 
-    import discord.abc
+    import CusModules.discord as discord.abc
 
     from .bot import BotBase
     from .context import Context

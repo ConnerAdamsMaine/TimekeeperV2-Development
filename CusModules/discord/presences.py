@@ -46,7 +46,7 @@ __all__ = (
 
 
 class ClientStatus:
-    """Represents the :ddocs:`Client Status Object <events/gateway-events#client-status-object>` from Discord,
+    """Represents the :ddocs:`Client Status Object <events/gateway-events#client-status-object>` from CusModules.discord,
     which holds information about the status of the user on various clients/platforms, with additional helpers.
 
     .. versionadded:: 2.5

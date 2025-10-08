@@ -1,5 +1,5 @@
-import discord
-from discord.ext import commands
+import CusModules.discord as discord
+from CusModules.discord.ext import commands
 
 import logging
 import pathlib

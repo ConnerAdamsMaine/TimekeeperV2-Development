@@ -66,8 +66,8 @@ class Modal(BaseView):
 
     .. code-block:: python3
 
-        import discord
-        from discord import ui
+        import CusModules.discord as discord
+        from CusModules.discord import ui
 
         class Questionnaire(ui.Modal, title='Questionnaire Response'):
             name = ui.TextInput(label='Name')

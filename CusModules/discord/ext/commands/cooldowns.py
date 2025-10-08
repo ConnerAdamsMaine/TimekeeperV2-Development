@@ -26,15 +26,15 @@ from __future__ import annotations
 
 
 from typing import Any, Callable, Deque, Dict, Optional, Union, Generic, TypeVar, TYPE_CHECKING
-from discord.enums import Enum
-from discord.abc import PrivateChannel
+from CusModules.discord.enums import Enum
+from CusModules.discord.abc import PrivateChannel
 import time
 import asyncio
 from collections import deque
 
 from .errors import MaxConcurrencyReached
 from .context import Context
-from discord.app_commands import Cooldown as Cooldown
+from CusModules.discord.app_commands import Cooldown as Cooldown
 
 if TYPE_CHECKING:
     from typing_extensions import Self

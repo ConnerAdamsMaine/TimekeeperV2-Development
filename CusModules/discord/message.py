@@ -140,7 +140,7 @@ def convert_emoji_reaction(emoji: Union[EmojiInputType, Reaction]) -> str:
 
 
 class Attachment(Hashable):
-    """Represents an attachment from Discord.
+    """Represents an attachment from CusModules.discord.
 
     .. container:: operations
 
@@ -1717,7 +1717,7 @@ class PartialMessage(Hashable):
         Raises
         -------
         InvalidData
-            An unknown channel type was received from Discord
+            An unknown channel type was received from CusModules.discord
             or the guild the thread belongs to is not the same
             as the one in this object points to.
         HTTPException
@@ -1983,7 +1983,7 @@ class PartialMessage(Hashable):
 
 @flatten_handlers
 class Message(PartialMessage, Hashable):
-    r"""Represents a message from Discord.
+    r"""Represents a message from CusModules.discord.
 
     .. container:: operations
 

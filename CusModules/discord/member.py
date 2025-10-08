@@ -30,7 +30,7 @@ import itertools
 from operator import attrgetter
 from typing import Any, Awaitable, Callable, Collection, Dict, List, Optional, TYPE_CHECKING, Tuple, TypeVar, Union
 
-import discord.abc
+import CusModules.discord as discord.abc
 
 from . import utils
 from .asset import Asset
