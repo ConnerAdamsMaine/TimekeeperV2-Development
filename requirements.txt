@@ -1,6 +1,4 @@
-
 django
-discord.py
 python-dotenv
 redis
 PyNaCl
