@@ -1986,6 +1986,94 @@ class UltimateTimeTracker(PermissionMixin):
     # CORE TIME TRACKING WITH ENTERPRISE FEATURES
     # ========================================================================
     
+    async def set_user_time(self, server_id: int, user_id: int, category: str, seconds: int) -> int:
+        """Set user's time for a specific category to an exact value"""
+        try:
+            # Validate inputs
+            if seconds < 0:
+                raise ValidationError("Time cannot be negative", context={'seconds': seconds})
+            
+            if not await self.validate_category(server_id, category):
+                raise CategoryError(f"Invalid category: {category}", context={'category': category})
+            
+            # Get current time for this category
+            user_times_key = f"user_times:{server_id}:{user_id}"
+            current_category_time = await self.redis.hget(user_times_key, category)
+            current_category_time = int(current_category_time) if current_category_time else 0
+            
+            # Get current total
+            current_total = await self.redis.hget(user_times_key, 'total')
+            current_total = int(current_total) if current_total else 0
+            
+            # Calculate the difference to adjust total
+            time_difference = seconds - current_category_time
+            new_total = current_total + time_difference
+            
+            # Ensure total doesn't go negative
+            if new_total < 0:
+                new_total = 0
+                logger.warning(f"Adjusted total to 0 for user {user_id} (would have been negative)")
+            
+            # Update user times using batch operations
+            operations = []
+            
+            # Set category time
+            operations.append(BatchOperation(
+                operation_type='hset',
+                key=user_times_key,
+                value={category: str(seconds), 'total': str(new_total)},
+                priority=BatchOperationType.HIGH_PRIORITY
+            ))
+            
+            # Update leaderboards - zadd will replace existing scores
+            # For category leaderboard (member must be string, score is the value)
+            operations.append(BatchOperation(
+                operation_type='zadd',
+                key=f"leaderboard:{server_id}:{category}",
+                value={str(user_id): seconds},  # Convert user_id to string
+                priority=BatchOperationType.NORMAL_PRIORITY
+            ))
+            
+            # For total leaderboard
+            operations.append(BatchOperation(
+                operation_type='zadd',
+                key=f"leaderboard:{server_id}:total",
+                value={str(user_id): new_total},  # Convert user_id to string
+                priority=BatchOperationType.NORMAL_PRIORITY
+            ))
+            
+            # Add operations to batch processor
+            for operation in operations:
+                await self.batch_processor.add_operation(operation)
+            
+            # Invalidate caches
+            self._invalidate_cache_pattern(f"user_times:{server_id}:{user_id}")
+            self._invalidate_cache_pattern(f"leaderboard:{server_id}")
+            
+            # Audit log
+            if self.audit_enabled:
+                await self._log_audit_event('set_user_time', {
+                    'server_id': server_id,
+                    'user_id': user_id,
+                    'category': category,
+                    'old_time': current_category_time,
+                    'new_time': seconds,
+                    'difference': time_difference
+                })
+            
+            logger.info(f"Set time for user {user_id} in category {category}: {current_category_time}s -> {seconds}s (diff: {time_difference}s)")
+            
+            return seconds
+            
+        except Exception as e:
+            logger.error(f"Error setting user time: {e}")
+            raise TimeTrackerError(f"Failed to set user time: {str(e)}", context={
+                'server_id': server_id,
+                'user_id': user_id,
+                'category': category,
+                'seconds': seconds
+            }, cause=e)
+    
     async def add_time(self, server_id: int, user_id: int, category: str, seconds: int,
                       session_id: str = None, metadata: Dict[str, Any] = None) -> Dict[str, Any]:
         """Add time entry with comprehensive validation and processing"""

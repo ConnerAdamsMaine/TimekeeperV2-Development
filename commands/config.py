@@ -380,7 +380,12 @@ class TimeTrackerConfig(commands.Cog):
             await interaction.followup.send("❌ Please specify a user!", ephemeral=True)
             return
         
-        user_stats = await self.tracker.get_user_times(interaction.guild.id, user.id)
+        # Get user times with metadata and analytics
+        user_stats = await self.tracker.get_user_times(
+            interaction.guild.id, 
+            user.id,
+            include_metadata=True  # This includes analytics data
+        )
         
         embed = discord.Embed(
             title=f"📊 Stats for {user.display_name}",
@@ -390,41 +395,82 @@ class TimeTrackerConfig(commands.Cog):
         
         embed.set_thumbnail(url=user.display_avatar.url)
         
+        # Total time - use 'total' key from dictionary
+        total_time = user_stats.get('total', 0)
         embed.add_field(
             name="⏱️ Total Time",
-            value=self.tracker.format_time(user_stats.total_time),
+            value=user_stats.get('total_formatted', self.tracker._format_time(total_time)),
             inline=True
         )
         
-        embed.add_field(
-            name="🎯 Productivity Score",
-            value=f"{user_stats.productivity_score:.1f}/100",
-            inline=True
-        )
+        # Productivity score - get from analytics if available
+        analytics = user_stats.get('analytics', {})
+        if analytics and 'productivity_score' in analytics:
+            embed.add_field(
+                name="🎯 Productivity Score",
+                value=f"{analytics['productivity_score']}/100",
+                inline=True
+            )
         
-        embed.add_field(
-            name="🔥 Streak",
-            value=f"{user_stats.streak_days} days",
-            inline=True
-        )
+        # Streak - get from analytics if available
+        if analytics and 'streak_days' in analytics:
+            embed.add_field(
+                name="🔥 Streak",
+                value=f"{analytics['streak_days']} days",
+                inline=True
+            )
         
         # Show top categories
-        if user_stats.categories:
+        categories = user_stats.get('categories', {})
+        if categories:
+            # Sort categories by seconds (categories is a dict with category name as key)
             sorted_categories = sorted(
-                [(cat, time) for cat, time in user_stats.categories.items() if time > 0],
+                [(cat, data['seconds']) for cat, data in categories.items() if data['seconds'] > 0],
                 key=lambda x: x[1],
                 reverse=True
             )[:5]
             
             if sorted_categories:
                 category_text = "\n".join([
-                    f"`{cat}`: {self.tracker.format_time(time)}" 
+                    f"`{cat}`: {self.tracker._format_time(time)}" 
                     for cat, time in sorted_categories
                 ])
                 embed.add_field(
                     name="🏆 Top Categories",
                     value=category_text,
                     inline=False
+                )
+        
+        # Add additional analytics if available
+        if analytics:
+            if 'grade' in analytics:
+                embed.add_field(
+                    name="📈 Grade",
+                    value=analytics['grade'],
+                    inline=True
+                )
+            if 'consistency_rating' in analytics:
+                embed.add_field(
+                    name="🎯 Consistency",
+                    value=analytics['consistency_rating'],
+                    inline=True
+                )
+        
+        # Show metadata if available
+        metadata = user_stats.get('metadata', {})
+        if metadata:
+            if 'last_activity' in metadata and metadata['last_activity']:
+                last_activity = datetime.fromisoformat(metadata['last_activity'])
+                embed.add_field(
+                    name="🕐 Last Activity",
+                    value=f"<t:{int(last_activity.timestamp())}:R>",
+                    inline=True
+                )
+            if 'total_sessions' in metadata:
+                embed.add_field(
+                    name="📊 Total Sessions",
+                    value=str(metadata['total_sessions']),
+                    inline=True
                 )
         
         # Check if user is suspended
@@ -450,7 +496,7 @@ class TimeTrackerConfig(commands.Cog):
             
             embed = discord.Embed(
                 title="⏰ Time Set",
-                description=f"Set {user.mention}'s time in `{category}` to {self.tracker.format_time(seconds)}",
+                description=f"Set {user.mention}'s time in `{category}` to {self.tracker._format_time(seconds)}",
                 color=discord.Color.green()
             )
             await interaction.followup.send(embed=embed)
@@ -470,11 +516,22 @@ class TimeTrackerConfig(commands.Cog):
         
         try:
             seconds = self._parse_time_string(value)
-            new_total = await self.tracker.add_time(interaction.guild.id, user.id, category, seconds)
+            
+            # add_time returns a dict, not an integer
+            result = await self.tracker.add_time(interaction.guild.id, user.id, category, seconds)
+            
+            if not result.get('success', False):
+                await interaction.followup.send(f"❌ Failed to add time: {result.get('message', 'Unknown error')}", ephemeral=True)
+                return
+            
+            # Get the updated user times to show new total
+            user_times = await self.tracker.get_user_times(interaction.guild.id, user.id)
+            category_data = user_times.get('categories', {}).get(category, {})
+            new_total = category_data.get('seconds', seconds)
             
             embed = discord.Embed(
                 title="➕ Time Added",
-                description=f"Added {self.tracker.format_time(seconds)} to {user.mention}'s `{category}`\n**New total:** {self.tracker.format_time(new_total)}",
+                description=f"Added {self.tracker._format_time(seconds)} to {user.mention}'s `{category}`\n**New total:** {self.tracker._format_time(new_total)}",
                 color=discord.Color.green()
             )
             await interaction.followup.send(embed=embed)
@@ -704,7 +761,7 @@ class TimeTrackerConfig(commands.Cog):
         
         embed.add_field(
             name="⏱️ Total Time",
-            value=self.tracker.format_time(stats.total_time),
+            value=self.tracker._format_time(stats.total_time),
             inline=True
         )
         
@@ -716,7 +773,7 @@ class TimeTrackerConfig(commands.Cog):
         
         embed.add_field(
             name="📈 Daily Average",
-            value=self.tracker.format_time(int(stats.daily_average * 86400)),
+            value=self.tracker._format_time(int(stats.daily_average * 86400)),
             inline=True
         )
         
@@ -729,7 +786,7 @@ class TimeTrackerConfig(commands.Cog):
             )[:5]
             
             category_text = "\n".join([
-                f"`{cat}`: {self.tracker.format_time(time)}"
+                f"`{cat}`: {self.tracker._format_time(time)}"
                 for cat, time in top_categories if time > 0
             ])
             
@@ -780,7 +837,7 @@ class TimeTrackerConfig(commands.Cog):
             for i, entry in enumerate(leaderboard):
                 user = self.bot.get_user(entry["user_id"])
                 user_name = user.display_name if user else f"User {entry['user_id']}"
-                time_str = self.tracker.format_time(entry["time"])
+                time_str = self.tracker._format_time(entry["time"])
                 
                 leaderboard_text.append(f"{medals[i]} **{user_name}** - {time_str}")
             
