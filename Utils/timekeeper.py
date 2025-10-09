@@ -38,8 +38,8 @@ import redis.asyncio as redis
 from typing import Dict, Optional, List, Set, Any, Tuple, Union, Callable
 import logging
 from datetime import datetime, timedelta
-import discord 
-from discord import utils
+import discord
+from discord import utils, Interaction, guild
 import json
 import os
 import time
@@ -2714,8 +2714,16 @@ class UltimateTimeTracker(PermissionMixin):
                 cursor, keys = await self.redis.scan(cursor, match=pattern, count=100)
                 
                 for key in keys:
+                    # Decode key if it's bytes
+                    if isinstance(key, bytes):
+                        key = key.decode('utf-8')
+                    
                     time_data = await self.redis.hget(key, category)
                     if time_data:
+                        # Decode bytes to string before converting to int
+                        if isinstance(time_data, bytes):
+                            time_data = time_data.decode('utf-8')
+                        
                         category_time = int(time_data)
                         if category_time > 0:
                             unique_users += 1
@@ -2740,9 +2748,17 @@ class UltimateTimeTracker(PermissionMixin):
                 cursor, keys = await self.redis.scan(cursor, match=pattern, count=100)
                 
                 for key in keys:
+                    # Decode key if needed
+                    if isinstance(key, bytes):
+                        key = key.decode('utf-8')
+                    
                     entries = await self.redis.zrange(key, 0, -1)
                     for entry_data in entries:
                         try:
+                            # Decode bytes if needed
+                            if isinstance(entry_data, bytes):
+                                entry_data = entry_data.decode('utf-8')
+                            
                             entry = json.loads(entry_data)
                             if entry.get('category') == category:
                                 entry_count += 1
@@ -2757,7 +2773,7 @@ class UltimateTimeTracker(PermissionMixin):
                 'unique_users': unique_users,
                 'total_time': total_time,
                 'total_time_formatted': self._format_time(total_time),
-                'user_usage': sorted(user_usage, key=lambda x: x['total_time'], reverse=True)[:10]  # Top 10 users
+                'user_usage': sorted(user_usage, key=lambda x: x['total_time'], reverse=True)[:10]
             }
             
         except Exception as e:
@@ -3475,7 +3491,7 @@ class UltimateClockManager:
         logger.info("UltimateClockManager initialized with enterprise features")
     
     async def clock_in(self, server_id: int, user_id: int, category: str,
-                      role: str, interaction: discord.Interaction, metadata: Dict[str, Any] = None
+                      role: str, interaction: Interaction, metadata: Dict[str, Any] = None
                       ) -> Dict[str, Any]:
         """Enhanced clock in with comprehensive session management"""
         try:
@@ -3493,6 +3509,7 @@ class UltimateClockManager:
             # Validate category (this would use the main tracker's validation)
             # For now, we'll do basic validation
             category = category.lower().strip()
+            guild = interaction.guild
             
             # Create comprehensive session
             session_id = str(uuid.uuid4())
@@ -3529,7 +3546,7 @@ class UltimateClockManager:
             role_error = None
             
             try:
-                role = await self._get_or_create_role(guild, role)
+                role = await self._get_or_create_role(guild, category, role)
                 if role:
                     await interaction.user.add_roles(role, reason=f"Clocked into {category}")
                     session_data['role_id'] = role.id
@@ -3994,7 +4011,7 @@ class UltimateClockManager:
             
             # Check cache
             if cache_key in self.role_cache:
-                role_id = self.role_cache[cache_key]
+                role_id = int(self.role_cache[cache_key])
                 role = guild.get_role(role_id)
                 if role:
                     return role
@@ -4002,25 +4019,26 @@ class UltimateClockManager:
                     # Role was deleted, remove from cache
                     del self.role_cache[cache_key]
             
-            # Look for existing role
+             # Look for existing role
             existing_role = utils.get(guild.roles, name=role_name)
             if existing_role:
                 self.role_cache[cache_key] = existing_role.id
                 return existing_role
             
-            role = await guild.create_role(
+            # Create new role
+            new_role = await guild.create_role(  # Changed from 'Role' to 'new_role'
                 name=role_name,
-                color=discord.Color.blurple,
+                color=discord.Color.blurple(),
                 hoist=False,
                 mentionable=False,
                 reason=f"Timekeeper role for {category}"
             )
             
             # Cache the new role
-            self.role_cache[cache_key] = role.id
+            self.role_cache[cache_key] = new_role.id
             
             logger.info(f"Created new timekeeper role: {role_name}")
-            return role
+            return new_role
             
         except Exception as e:
             logger.error(f"Error creating role for category {category}: {e}")
