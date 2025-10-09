@@ -68,7 +68,7 @@ class Bot(commands.Bot):
     
     async def on_ready(self):
         logger.log(logging.INFO, f'Logged in as {self.user} (ID: {self.user.id})')
-
+    
     async def on_command_error(self, ctx: commands.Context, error):
         logger.log(logging.ERROR, f'Error occurred in command "{ctx.command}": {error}')
     
