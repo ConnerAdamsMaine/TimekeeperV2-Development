@@ -766,12 +766,19 @@ class EnterpriseBatchProcessor:
                     score, member = operation.value
                     pipe.zincrby(operation.key, score, member)
                     
+                elif operation.operation_type == 'lpush':
+                    pipe.lpush(operation.key, operation.value)
+                    
                 elif operation.operation_type == 'delete':
                     pipe.delete(operation.key)
+
+                elif operation.operation_type == 'zremrangebyscore':
+                    min_score, max_score = operation.value
+                    pipe.zremrangebyscore(operation.key, min_score, max_score)
                     
                 else:
                     logger.warning(f"Unknown operation type: {operation.operation_type}")
-            
+                    
             # Execute pipeline
             results = await pipe.execute()
             
