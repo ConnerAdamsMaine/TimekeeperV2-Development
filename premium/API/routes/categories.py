@@ -1,28 +1,42 @@
-# premium/API/routes/categories.py
 from flask import Blueprint, request, jsonify, g
-from ..middleware.auth import require_api_key
+from ..middleware.auth import require_api_key, require_tier, APITier
 from ..utils.helpers import run_async, get_tracker_and_clock
 
 categories_bp = Blueprint('categories', __name__)
 
+# Supporter tier can read categories
 @categories_bp.route('', methods=['GET'])
-@require_api_key(['read'])
+@require_api_key(['read:basic'])  # Supporter+
 def get_categories(guild_id: int):
-    if g.api_key_data['guild_id'] != guild_id:
-        return jsonify({'error': 'Unauthorized'}), 403
+    """Get categories - Supporter tier and up"""
+    if g.api_key_data['tier'] != APITier.ADMIN:
+        if g.api_key_data['guild_id'] != guild_id:
+            return jsonify({'error': 'Unauthorized guild access'}), 403
     
     async def fetch():
         tracker, _ = await get_tracker_and_clock()
         include_metadata = request.args.get('include_metadata', 'false').lower() == 'true'
+        
+        # Premium+ can get metadata
+        if include_metadata and g.api_key_data['tier'].value < APITier.PREMIUM.value:
+            include_metadata = False
+        
         return await tracker.list_categories(guild_id, include_archived=False, include_metadata=include_metadata)
     
-    return jsonify({'guild_id': guild_id, 'categories': run_async(fetch())}), 200
+    return jsonify({
+        'guild_id': guild_id,
+        'categories': run_async(fetch()),
+        'metadata_available': g.api_key_data['tier'].value >= APITier.PREMIUM.value
+    }), 200
 
+# Enterprise tier required to add categories
 @categories_bp.route('', methods=['POST'])
-@require_api_key(['admin'])
+@require_tier(APITier.ENTERPRISE)  # Enterprise+ only
 def add_category(guild_id: int):
-    if g.api_key_data['guild_id'] != guild_id:
-        return jsonify({'error': 'Unauthorized'}), 403
+    """Add category - Enterprise tier and up"""
+    if g.api_key_data['tier'] != APITier.ADMIN:
+        if g.api_key_data['guild_id'] != guild_id:
+            return jsonify({'error': 'Unauthorized guild access'}), 403
     
     data = request.get_json()
     if not data or 'name' not in data:
@@ -41,11 +55,14 @@ def add_category(guild_id: int):
     result = run_async(create())
     return jsonify(result), 201 if result['success'] else 400
 
+# Enterprise tier required to remove categories
 @categories_bp.route('/<string:category>', methods=['DELETE'])
-@require_api_key(['admin'])
+@require_tier(APITier.ENTERPRISE)
 def remove_category(guild_id: int, category: str):
-    if g.api_key_data['guild_id'] != guild_id:
-        return jsonify({'error': 'Unauthorized'}), 403
+    """Remove category - Enterprise tier and up"""
+    if g.api_key_data['tier'] != APITier.ADMIN:
+        if g.api_key_data['guild_id'] != guild_id:
+            return jsonify({'error': 'Unauthorized guild access'}), 403
     
     async def delete():
         tracker, _ = await get_tracker_and_clock()

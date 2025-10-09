@@ -3,18 +3,32 @@ from flask import Blueprint, request, jsonify, g
 import secrets
 import json
 from datetime import datetime
-from ..middleware.auth import require_api_key
+from ..middleware.auth import require_tier, APITier
 from ..utils.helpers import run_async, get_tracker_and_clock
 
 webhooks_bp = Blueprint('webhooks', __name__)
 
+# Enterprise tier required for webhooks
 @webhooks_bp.route('', methods=['POST'])
-@require_api_key(['admin'])
+@require_tier(APITier.ENTERPRISE)  # Enterprise+ for webhooks
 def create_webhook(guild_id: int):
-    if g.api_key_data['guild_id'] != guild_id:
-        return jsonify({'error': 'Unauthorized'}), 403
+    """Create webhook - Enterprise tier and up"""
+    if g.api_key_data['tier'] != APITier.ADMIN:
+        if g.api_key_data['guild_id'] != guild_id:
+            return jsonify({'error': 'Unauthorized guild access'}), 403
+    
+    # Verify webhooks feature is enabled
+    if not g.api_key_data['tier_config']['features']['webhooks']:
+        return jsonify({
+            'error': 'Webhooks not available for your tier',
+            'your_tier': g.api_key_data['tier_name'],
+            'required_tier': 'Enterprise',
+            'feature': 'webhooks'
+        }), 403
     
     data = request.get_json()
+    if not data or 'url' not in data or 'events' not in data:
+        return jsonify({'error': 'Missing url or events'}), 400
     if not data or 'url' not in data or 'events' not in data:
         return jsonify({'error': 'Missing url or events'}), 400
     
@@ -43,4 +57,8 @@ def create_webhook(guild_id: int):
             'secret': webhook_data['secret']
         }
     
-    return jsonify({'success': True, 'webhook': run_async(store())}), 201
+    return jsonify({
+        'success': True,
+        'webhook': {},
+        'tier': g.api_key_data['tier_name']
+    }), 201

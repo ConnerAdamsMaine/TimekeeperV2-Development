@@ -9,20 +9,21 @@ import json
 from datetime import datetime
 import logging
 
-from ..middleware.auth import require_api_key
+from ..middleware.auth import require_api_key, require_tier, APITier
 from ..utils.helpers import run_async, get_tracker_and_clock
 
 logger = logging.getLogger(__name__)
 
 clock_bp = Blueprint('clock', __name__)
 
-
+# Premium tier required for clock in (admin users only for Premium tier)
 @clock_bp.route('/clockin', methods=['POST'])
-@require_api_key(['write'])
+@require_tier(APITier.PREMIUM)  # Premium+ can clock in
 def api_clockin(guild_id: int):
-    """Clock in a user via API"""
-    if g.api_key_data['guild_id'] != guild_id:
-        return jsonify({'error': 'Unauthorized'}), 403
+    """Clock in user - Premium: admin users only, Enterprise+: all users"""
+    if g.api_key_data['tier'] != APITier.ADMIN:
+        if g.api_key_data['guild_id'] != guild_id:
+            return jsonify({'error': 'Unauthorized guild access'}), 403
     
     data = request.get_json()
     
@@ -33,8 +34,35 @@ def api_clockin(guild_id: int):
         }), 400
     
     user_id = data['user_id']
-    category = data['category']
-    description = data.get('description')
+    
+    # Premium tier can only clock in admin users
+    if g.api_key_data['tier'] == APITier.PREMIUM:
+        # Check if user is admin
+        async def check_admin():
+            bot = current_app.config.get('BOT')
+            if not bot:
+                return False
+            
+            guild = bot.get_guild(guild_id)
+            if not guild:
+                return False
+            
+            member = guild.get_member(user_id)
+            if not member:
+                return False
+            
+            return member.guild_permissions.administrator
+        
+        is_admin = run_async(check_admin())
+        
+        if not is_admin:
+            return jsonify({
+                'error': 'Premium tier restriction',
+                'message': 'Premium tier can only clock in/out admin users',
+                'your_tier': 'PREMIUM',
+                'required_tier_for_all_users': 'ENTERPRISE',
+                'upgrade_endpoint': '/api/v1/tier/upgrade'
+            }), 403
     
     try:
         async def clockin():

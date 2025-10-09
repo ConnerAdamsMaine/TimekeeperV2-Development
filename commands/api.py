@@ -201,6 +201,6 @@ class APIManagementCog(commands.Cog):
             await interaction.followup.send(embed=embed, ephemeral=True)
 
 
-#async def setup(bot):
-#    await bot.add_cog(APIManagementCog(bot))
-#    logger.info("APIManagementCog loaded successfully")
+async def setup(bot):
+    await bot.add_cog(APIManagementCog(bot))
+    logger.info("APIManagementCog loaded successfully")
