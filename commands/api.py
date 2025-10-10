@@ -38,7 +38,7 @@ class APIManagementCog(commands.Cog):
             return False
         
         try:
-            from premium.API.app import run_api
+            from API.app import run_api
             
             def run_api_thread():
                 try:
@@ -145,7 +145,7 @@ class APIManagementCog(commands.Cog):
                         color=discord.Color.red()
                     )
                 else:
-                    from premium.API.middleware.auth import APIAuth
+                    from API.middleware.auth import APIAuth
                     from Utils.timekeeper import get_shared_tracker
                     
                     # Generate API key for this guild

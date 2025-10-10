@@ -38,6 +38,9 @@ def create_app(bot=None):
         config_bp, permissions_bp, analytics_bp, webhooks_bp
     )
     from .routes.tier_management import tier_mgmt_bp
+    from routes.admin import admin_api_bp
+    
+    app.register_blueprint(admin_api_bp, url_prefix="/api/v1/admin")
     
     # Core routes
     app.register_blueprint(auth_bp, url_prefix='/api/v1/auth')

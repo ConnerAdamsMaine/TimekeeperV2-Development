@@ -1,3 +1,4 @@
+# premium/API/routes/__init__.py
 from .auth import auth_bp
 from .status import status_bp
 from .users import users_bp
@@ -9,10 +10,12 @@ from .config import config_bp
 from .permissions import permissions_bp
 from .analytics import analytics_bp
 from .webhooks import webhooks_bp
-from .tier_management import tier_mgmt_bp  # NEW
-all = [
-'auth_bp', 'status_bp', 'users_bp', 'clock_bp',
-'categories_bp', 'leaderboard_bp', 'export_bp',
-'config_bp', 'permissions_bp', 'analytics_bp',
-'webhooks_bp', 'tier_mgmt_bp'  # NEW
+from .tier_management import tier_mgmt_bp
+from .admin import admin_api_bp  # NEW
+
+__all__ = [
+    'auth_bp', 'status_bp', 'users_bp', 'clock_bp',
+    'categories_bp', 'leaderboard_bp', 'export_bp',
+    'config_bp', 'permissions_bp', 'analytics_bp',
+    'webhooks_bp', 'tier_mgmt_bp', 'admin_api_bp'  # NEW
 ]
