@@ -230,7 +230,7 @@ class ServerSettings:
     
     def __post_init__(self):
         if self.categories is None:
-            self.categories = {"work", "break", "meeting", "development", "support", "training", "admin"}
+            self.categories = {"Clocked in", "Break"}
         
         if not self.notification_settings:
             self.notification_settings = {
@@ -1864,6 +1864,9 @@ class UltimateTimeTracker(PermissionMixin):
             asyncio.create_task(self._metrics_collection_loop())
             asyncio.create_task(self._cache_maintenance_loop())
             
+            
+            asyncio.create_task(self._migrate_legacy_categories())
+
             logger.info("UltimateTimeTracker connected successfully with all subsystems")
             return True
             
@@ -2406,6 +2409,53 @@ class UltimateTimeTracker(PermissionMixin):
             except Exception as e:
                 logger.error(f"Cache maintenance error: {e}")
     
+    async def _migrate_legacy_categories(self):
+        try:
+            logger.info("Starting legacy category migration check... ")
+            
+            old_defaults = {"work", "break", "meeting", "development", "support", "training", "admin"}
+            
+            new_defaults = {"Clocked in", "Break"}
+            
+            pattern = "server_settings:*"
+            cursor = 0
+            servers_migrated = 0
+            servers_checked = 0
+            
+            while True:
+                cursor, keys = await self.redis.scan(cursor, match=pattern, count=100)
+                
+                for key in keys:
+                    try:
+                        servers_checked += 1
+                        
+                        if isinstance(key, bytes):
+                            key = key.decode('utf-8')
+                            
+                        server_id = int(key.split(":")[-1])
+                        settings = await self.get_server_settings(server_id)
+                        
+                        if settings.categories == old_defaults:
+                            logger.info(f"Migrating server {server_id} from old defaults to new defaults")
+                            
+                            await self._save_server_settings(server_id, settings)
+                            
+                            self._invalidate_cache_pattern(f"settings:{server_id}")
+                            self._invalidate_cache_pattern(f"categories:{server_id}")
+                            
+                            servers_migrated += 1
+                            
+                            if self.audit_enabled:
+                                await self._log_audit_event('migrate_categories', {
+                                    'server_id': server_id,
+                                    'old_categories': list(old_defaults),
+                                    'new_categories': list(new_defaults),
+                                    'migration_type': 'automatic',
+                                    'reason': 'Legacy default category migration'
+                                })
+                    except Exception as e:
+                        logger.error(f"Error migrating server settings for key {key}: {e}")
+    
     async def _update_health_score(self):
         """Update overall system health score"""
         try:
@@ -2729,7 +2779,7 @@ class UltimateTimeTracker(PermissionMixin):
                 }
             
             # Check if it's a default category
-            default_categories = {"work", "break", "meeting"}
+            default_categories = {"Clocked in", "Break"}
             if category in default_categories and not force:
                 return {
                     'success': False,
@@ -2965,7 +3015,7 @@ class UltimateTimeTracker(PermissionMixin):
             
         except Exception as e:
             logger.error(f"Error listing categories: {e}")
-            return ["work", "break", "meeting"]  # Fallback
+            return ["Clocked in", "Break"]  # Fallback
     
     async def _get_category_metadata(self, server_id: int, category: str) -> Optional[Dict[str, Any]]:
         """Get metadata for a specific category"""
@@ -3001,7 +3051,7 @@ class UltimateTimeTracker(PermissionMixin):
         except Exception as e:
             logger.error(f"Error validating category: {e}")
             # Fallback to basic validation
-            return category.lower().strip() in ["work", "break", "meeting"]
+            return category.lower().strip() in ["clocked in", "break"]
     
     # ========================================================================
     # ENHANCED USER DATA RETRIEVAL
