@@ -1865,7 +1865,6 @@ class UltimateTimeTracker(PermissionMixin):
             asyncio.create_task(self._cache_maintenance_loop())
             
             
-            asyncio.create_task(self._migrate_legacy_categories())
 
             logger.info("UltimateTimeTracker connected successfully with all subsystems")
             return True
