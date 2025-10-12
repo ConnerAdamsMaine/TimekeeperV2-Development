@@ -2455,6 +2455,8 @@ class UltimateTimeTracker(PermissionMixin):
                                 })
                     except Exception as e:
                         logger.error(f"Error migrating server settings for key {key}: {e}")
+        except Exception as e:
+            logger.error("Failed to migrate server settings")
     
     async def _update_health_score(self):
         """Update overall system health score"""
