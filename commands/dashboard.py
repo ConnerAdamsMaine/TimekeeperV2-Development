@@ -48,8 +48,103 @@ from Utils.timekeeper import get_shared_role_tracker
 
 logger = logging.getLogger(__name__)
 
-# Path to store dashboard data
-DASHBOARD_DATA_FILE = Path("data/dashboards.json")
+
+class CategorySelectView(discord.ui.View):
+    """View with category selection dropdown for clock in"""
+    
+    def __init__(self, bot, guild_id: int, categories: List[str]):
+        super().__init__(timeout=60)  # 1 minute timeout
+        self.bot = bot
+        self.guild_id = guild_id
+        
+        # Create select menu with categories
+        options = []
+        for cat in categories[:25]:  # Discord limit of 25 options
+            # Determine emoji based on category
+            if cat.lower() == "break":
+                emoji = "☕"
+            elif cat.lower() in ["clocked in", "main", "work"]:
+                emoji = "⏰"
+            elif cat.lower() in ["meeting", "call"]:
+                emoji = "📞"
+            elif cat.lower() in ["development", "coding", "dev"]:
+                emoji = "💻"
+            else:
+                emoji = "📋"
+            
+            options.append(
+                discord.SelectOption(
+                    label=cat.title(),
+                    value=cat,
+                    description=f"Clock into {cat}",
+                    emoji=emoji
+                )
+            )
+        
+        self.category_select = discord.ui.Select(
+            placeholder="Choose a category to clock into...",
+            min_values=1,
+            max_values=1,
+            options=options,
+            custom_id="category_select"
+        )
+        self.category_select.callback = self.category_callback
+        self.add_item(self.category_select)
+    
+    async def category_callback(self, interaction: discord.Interaction):
+        """Handle category selection"""
+        await interaction.response.defer(ephemeral=True)
+        
+        selected_category = self.category_select.values[0]
+        
+        tracker, clock = await get_shared_role_tracker(self.bot)
+        
+        # Determine role
+        category_lower = selected_category.lower().strip()
+        role = "Break" if category_lower == "break" else "Clocked In"
+        
+        metadata = {
+            'guild_name': interaction.guild.name,
+            'channel_id': interaction.channel_id,
+            'selected_from_dropdown': True
+        }
+        
+        result = await clock.clock_in(
+            server_id=self.guild_id,
+            user_id=interaction.user.id,
+            category=category_lower,
+            role=role,
+            interaction=interaction,
+            metadata=metadata
+        )
+        
+        if result['success']:
+            embed = discord.Embed(
+                title="✅ Clocked In",
+                description=f"Category: `{result['category']}`\n"
+                           f"Started: <t:{int(result['start_time'].timestamp())}:t>",
+                color=discord.Color.green()
+            )
+            
+            if result.get('role_warning'):
+                embed.add_field(
+                    name="⚠️ Role Warning",
+                    value=result['role_warning'],
+                    inline=False
+                )
+        else:
+            embed = discord.Embed(
+                title="❌ Error",
+                description=result['message'],
+                color=discord.Color.red()
+            )
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
+        
+        # Disable the view after selection
+        for item in self.children:
+            item.disabled = True
+        self.stop()
 
 
 class SharedDashboardView(discord.ui.View):
@@ -75,8 +170,34 @@ class SharedDashboardView(discord.ui.View):
     
     @discord.ui.button(label="⏰ Clock In", style=discord.ButtonStyle.green, custom_id="clockin_btn")
     async def clock_in_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Clock in button handler - works for any user"""
-        await interaction.response.send_modal(ClockInModal(self.bot, self.guild_id))
+        """Clock in button handler - shows category dropdown"""
+        await interaction.response.defer(ephemeral=True)
+        await self._ensure_initialized()
+        
+        # Fetch available categories
+        categories = await self.tracker.list_categories(self.guild_id)
+        
+        if not categories:
+            embed = discord.Embed(
+                title="❌ No Categories",
+                description="No categories are configured for this server.\n"
+                           "Please ask an administrator to set up categories using `/categories add`.",
+                color=discord.Color.red()
+            )
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return
+        
+        # Create and send the category selection view
+        view = CategorySelectView(self.bot, self.guild_id, categories)
+        
+        embed = discord.Embed(
+            title="⏰ Select Category",
+            description="Choose which category you'd like to clock into:",
+            color=discord.Color.blue()
+        )
+        embed.set_footer(text="This menu will expire after 60 seconds")
+        
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
     
     @discord.ui.button(label="🛑 Clock Out", style=discord.ButtonStyle.red, custom_id="clockout_btn")
     async def clock_out_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -93,6 +214,13 @@ class SharedDashboardView(discord.ui.View):
                            f"Category: `{result['category']}`",
                 color=discord.Color.green()
             )
+            
+            if result.get('role_warning'):
+                embed.add_field(
+                    name="⚠️ Role Warning",
+                    value=result['role_warning'],
+                    inline=False
+                )
         else:
             embed = discord.Embed(
                 title="❌ Error",
@@ -284,12 +412,38 @@ class PersonalDashboardView(discord.ui.View):
     
     @discord.ui.button(label="⏰ Clock In", style=discord.ButtonStyle.green)
     async def clock_in_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Clock in button handler"""
+        """Clock in button handler - shows category dropdown"""
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("❌ This dashboard is not for you!", ephemeral=True)
             return
         
-        await interaction.response.send_modal(ClockInModal(self.bot, self.guild_id))
+        await interaction.response.defer(ephemeral=True)
+        await self._ensure_initialized()
+        
+        # Fetch available categories
+        categories = await self.tracker.list_categories(self.guild_id)
+        
+        if not categories:
+            embed = discord.Embed(
+                title="❌ No Categories",
+                description="No categories are configured for this server.\n"
+                           "Please ask an administrator to set up categories using `/categories add`.",
+                color=discord.Color.red()
+            )
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return
+        
+        # Create and send the category selection view
+        view = CategorySelectView(self.bot, self.guild_id, categories)
+        
+        embed = discord.Embed(
+            title="⏰ Select Category",
+            description="Choose which category you'd like to clock into:",
+            color=discord.Color.blue()
+        )
+        embed.set_footer(text="This menu will expire after 60 seconds")
+        
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
     
     @discord.ui.button(label="🛑 Clock Out", style=discord.ButtonStyle.red)
     async def clock_out_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -310,6 +464,13 @@ class PersonalDashboardView(discord.ui.View):
                            f"Category: `{result['category']}`",
                 color=discord.Color.green()
             )
+            
+            if result.get('role_warning'):
+                embed.add_field(
+                    name="⚠️ Role Warning",
+                    value=result['role_warning'],
+                    inline=False
+                )
         else:
             embed = discord.Embed(
                 title="❌ Error",
@@ -496,139 +657,140 @@ class PersonalDashboardView(discord.ui.View):
         await interaction.followup.send(embed=embed, ephemeral=True)
 
 
-class ClockInModal(discord.ui.Modal, title="Clock In"):
-    """Modal for clock in with category selection"""
-    
-    category = discord.ui.TextInput(
-        label="Category",
-        placeholder="Enter category (e.g., main, work, break)",
-        default="main",
-        required=True,
-        max_length=50
-    )
-    
-    description = discord.ui.TextInput(
-        label="Description (Optional)",
-        placeholder="Brief description of what you'll be working on",
-        required=False,
-        max_length=200,
-        style=discord.TextStyle.paragraph
-    )
-    
-    def __init__(self, bot, guild_id: int):
-        super().__init__()
-        self.bot = bot
-        self.guild_id = guild_id
-    
-    async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        
-        tracker, clock = await get_shared_role_tracker(self.bot)
-        
-        # Determine role
-        category_lower = self.category.value.lower().strip()
-        role = "Break" if category_lower == "break" else "Clocked In"
-        
-        metadata = {
-            'description': self.description.value if self.description.value else None,
-            'guild_name': interaction.guild.name,
-            'channel_id': interaction.channel_id
-        }
-        
-        result = await clock.clock_in(
-            server_id=self.guild_id,
-            user_id=interaction.user.id,
-            category=category_lower,
-            role=role,
-            interaction=interaction,
-            metadata=metadata
-        )
-        
-        if result['success']:
-            embed = discord.Embed(
-                title="✅ Clocked In",
-                description=f"Category: `{result['category']}`\n"
-                           f"Started: <t:{int(result['start_time'].timestamp())}:t>",
-                color=discord.Color.green()
-            )
-        else:
-            embed = discord.Embed(
-                title="❌ Error",
-                description=result['message'],
-                color=discord.Color.red()
-            )
-        
-        await interaction.followup.send(embed=embed, ephemeral=True)
-
-
 class DashboardManager:
-    """Manages persistent shared dashboards"""
+    """Manages persistent shared dashboards using Redis"""
     
     def __init__(self, bot):
         self.bot = bot
-        self.shared_dashboards: Dict[str, Dict[str, Any]] = {}  # guild_channel key -> dashboard info
         self.tracker = None
         self.clock = None
+        self.redis = None  # Will be initialized from tracker
         
-        # Ensure data directory exists
-        DASHBOARD_DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Load existing dashboards
-        self.load_dashboards()
+        logger.info("DashboardManager initialized with Redis storage")
     
-    def load_dashboards(self):
-        """Load dashboards from JSON file"""
-        if DASHBOARD_DATA_FILE.exists():
-            try:
-                with open(DASHBOARD_DATA_FILE, 'r') as f:
-                    self.shared_dashboards = json.load(f)
-                logger.info(f"Loaded {len(self.shared_dashboards)} shared dashboards from file")
-            except Exception as e:
-                logger.error(f"Error loading dashboards: {e}")
-                self.shared_dashboards = {}
-        else:
-            self.shared_dashboards = {}
+    async def _ensure_redis(self):
+        """Ensure Redis connection is available"""
+        if not self.redis:
+            if not self.tracker:
+                self.tracker, self.clock = await get_shared_role_tracker(self.bot)
+            self.redis = self.tracker.redis
     
-    def save_dashboards(self):
-        """Save dashboards to JSON file"""
+    async def load_dashboards(self):
+        """Load dashboards from Redis on startup"""
         try:
-            with open(DASHBOARD_DATA_FILE, 'w') as f:
-                json.dump(self.shared_dashboards, f, indent=2)
+            await self._ensure_redis()
+            
+            # Get all dashboard keys
+            pattern = "dashboard:*"
+            cursor = 0
+            dashboard_count = 0
+            
+            while True:
+                cursor, keys = await self.redis.scan(cursor, match=pattern, count=100)
+                dashboard_count += len(keys)
+                if cursor == 0:
+                    break
+            
+            logger.info(f"Found {dashboard_count} shared dashboards in Redis")
+            
         except Exception as e:
-            logger.error(f"Error saving dashboards: {e}")
+            logger.error(f"Error loading dashboards from Redis: {e}")
     
-    def add_dashboard(self, guild_id: int, channel_id: int, message_id: int):
-        """Add a new shared dashboard"""
-        key = f"{guild_id}_{channel_id}"
-        self.shared_dashboards[key] = {
-            'guild_id': guild_id,
-            'channel_id': channel_id,
-            'message_id': message_id,
-            'created_at': datetime.now().isoformat(),
-            'last_updated': datetime.now().isoformat()
-        }
-        self.save_dashboards()
-        logger.info(f"Added shared dashboard in channel {channel_id} of guild {guild_id}")
+    async def add_dashboard(self, guild_id: int, channel_id: int, message_id: int):
+        """Add a new shared dashboard to Redis"""
+        try:
+            await self._ensure_redis()
+            
+            key = f"dashboard:{guild_id}:{channel_id}"
+            dashboard_data = {
+                'guild_id': guild_id,
+                'channel_id': channel_id,
+                'message_id': message_id,
+                'created_at': datetime.now().isoformat(),
+                'last_updated': datetime.now().isoformat()
+            }
+            
+            # Store in Redis with no expiration (persistent)
+            await self.redis.set(key, json.dumps(dashboard_data))
+            
+            logger.info(f"Added shared dashboard to Redis: guild={guild_id}, channel={channel_id}")
+            
+        except Exception as e:
+            logger.error(f"Error adding dashboard to Redis: {e}")
     
-    def remove_dashboard(self, guild_id: int, channel_id: int):
-        """Remove a dashboard"""
-        key = f"{guild_id}_{channel_id}"
-        if key in self.shared_dashboards:
-            del self.shared_dashboards[key]
-            self.save_dashboards()
-            logger.info(f"Removed shared dashboard from channel {channel_id} in guild {guild_id}")
+    async def remove_dashboard(self, guild_id: int, channel_id: int):
+        """Remove a dashboard from Redis"""
+        try:
+            await self._ensure_redis()
+            
+            key = f"dashboard:{guild_id}:{channel_id}"
+            await self.redis.delete(key)
+            
+            logger.info(f"Removed shared dashboard from Redis: guild={guild_id}, channel={channel_id}")
+            
+        except Exception as e:
+            logger.error(f"Error removing dashboard from Redis: {e}")
     
-    def get_dashboard(self, guild_id: int, channel_id: int) -> Optional[Dict[str, Any]]:
-        """Get dashboard info"""
-        key = f"{guild_id}_{channel_id}"
-        return self.shared_dashboards.get(key)
+    async def get_dashboard(self, guild_id: int, channel_id: int) -> Optional[Dict[str, Any]]:
+        """Get dashboard info from Redis"""
+        try:
+            await self._ensure_redis()
+            
+            key = f"dashboard:{guild_id}:{channel_id}"
+            data = await self.redis.get(key)
+            
+            if data:
+                if isinstance(data, bytes):
+                    data = data.decode('utf-8')
+                return json.loads(data)
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error getting dashboard from Redis: {e}")
+            return None
     
-    def get_guild_dashboards(self, guild_id: int) -> List[Dict[str, Any]]:
-        """Get all dashboards for a guild"""
-        return [
-            dashboard for key, dashboard in self.shared_dashboards.items()
-            if dashboard['guild_id'] == guild_id
-        ]
+    async def get_guild_dashboards(self, guild_id: int) -> List[Dict[str, Any]]:
+        """Get all dashboards for a guild from Redis"""
+        try:
+            await self._ensure_redis()
+            
+            pattern = f"dashboard:{guild_id}:*"
+            cursor = 0
+            dashboards = []
+            
+            while True:
+                cursor, keys = await self.redis.scan(cursor, match=pattern, count=100)
+                
+                for key in keys:
+                    data = await self.redis.get(key)
+                    if data:
+                        if isinstance(data, bytes):
+                            data = data.decode('utf-8')
+                        dashboards.append(json.loads(data))
+                
+                if cursor == 0:
+                    break
+            
+            return dashboards
+            
+        except Exception as e:
+            logger.error(f"Error getting guild dashboards from Redis: {e}")
+            return []
+    
+    async def update_dashboard_timestamp(self, guild_id: int, channel_id: int):
+        """Update the last_updated timestamp for a dashboard"""
+        try:
+            await self._ensure_redis()
+            
+            dashboard = await self.get_dashboard(guild_id, channel_id)
+            if dashboard:
+                dashboard['last_updated'] = datetime.now().isoformat()
+                key = f"dashboard:{guild_id}:{channel_id}"
+                await self.redis.set(key, json.dumps(dashboard))
+                
+        except Exception as e:
+            logger.error(f"Error updating dashboard timestamp: {e}")
     
     async def update_dashboard_embed(self, dashboard_info: Dict[str, Any]) -> discord.Embed:
         """Create updated shared dashboard embed"""
@@ -724,42 +886,71 @@ class DashboardManager:
     
     async def update_all_dashboards(self):
         """Update all active shared dashboards"""
-        for key, dashboard_info in list(self.shared_dashboards.items()):
-            try:
-                # Get channel and message
-                channel = self.bot.get_channel(dashboard_info['channel_id'])
-                if not channel:
-                    logger.warning(f"Channel {dashboard_info['channel_id']} not found, removing dashboard")
-                    self.remove_dashboard(dashboard_info['guild_id'], dashboard_info['channel_id'])
-                    continue
+        try:
+            await self._ensure_redis()
+            
+            # Get all dashboard keys
+            pattern = "dashboard:*"
+            cursor = 0
+            
+            while True:
+                cursor, keys = await self.redis.scan(cursor, match=pattern, count=100)
                 
-                try:
-                    message = await channel.fetch_message(dashboard_info['message_id'])
-                except discord.NotFound:
-                    logger.warning(f"Message {dashboard_info['message_id']} not found, removing dashboard")
-                    self.remove_dashboard(dashboard_info['guild_id'], dashboard_info['channel_id'])
-                    continue
+                for key in keys:
+                    try:
+                        if isinstance(key, bytes):
+                            key = key.decode('utf-8')
+                        
+                        # Get dashboard data
+                        data = await self.redis.get(key)
+                        if not data:
+                            continue
+                        
+                        if isinstance(data, bytes):
+                            data = data.decode('utf-8')
+                        
+                        dashboard_info = json.loads(data)
+                        
+                        # Get channel and message
+                        channel = self.bot.get_channel(dashboard_info['channel_id'])
+                        if not channel:
+                            logger.warning(f"Channel {dashboard_info['channel_id']} not found, removing dashboard")
+                            await self.remove_dashboard(dashboard_info['guild_id'], dashboard_info['channel_id'])
+                            continue
+                        
+                        try:
+                            message = await channel.fetch_message(dashboard_info['message_id'])
+                        except discord.NotFound:
+                            logger.warning(f"Message {dashboard_info['message_id']} not found, removing dashboard")
+                            await self.remove_dashboard(dashboard_info['guild_id'], dashboard_info['channel_id'])
+                            continue
+                        
+                        # Update embed
+                        embed = await self.update_dashboard_embed(dashboard_info)
+                        
+                        # Create view
+                        view = SharedDashboardView(
+                            self.bot,
+                            dashboard_info['guild_id']
+                        )
+                        
+                        # Update message
+                        await message.edit(embed=embed, view=view)
+                        
+                        # Update timestamp
+                        await self.update_dashboard_timestamp(
+                            dashboard_info['guild_id'],
+                            dashboard_info['channel_id']
+                        )
+                        
+                    except Exception as e:
+                        logger.error(f"Error updating individual dashboard: {e}")
                 
-                # Update embed
-                embed = await self.update_dashboard_embed(dashboard_info)
-                
-                # Create view
-                view = SharedDashboardView(
-                    self.bot,
-                    dashboard_info['guild_id']
-                )
-                
-                # Update message
-                await message.edit(embed=embed, view=view)
-                
-                # Update last_updated timestamp
-                dashboard_info['last_updated'] = datetime.now().isoformat()
-                
-            except Exception as e:
-                logger.error(f"Error updating dashboard {key}: {e}")
-        
-        # Save updated timestamps
-        self.save_dashboards()
+                if cursor == 0:
+                    break
+                    
+        except Exception as e:
+            logger.error(f"Error in update_all_dashboards: {e}")
 
 
 class DashboardCog(commands.Cog):
@@ -770,13 +961,16 @@ class DashboardCog(commands.Cog):
         self.tracker = None
         self.clock = None
         self.dashboard_manager = DashboardManager(bot)
-        logger.info("DashboardCog initialized with persistent storage")
+        logger.info("DashboardCog initialized with Redis storage")
     
     async def cog_load(self):
         try:
             self.tracker, self.clock = await get_shared_role_tracker(self.bot)
             self.dashboard_manager.tracker = self.tracker
             self.dashboard_manager.clock = self.clock
+            
+            # Load existing dashboards from Redis
+            await self.dashboard_manager.load_dashboards()
             
             # Start dashboard update loop
             self.dashboard_update_loop.start()
@@ -887,7 +1081,7 @@ class DashboardCog(commands.Cog):
             else:
                 # Create shared persistent dashboard
                 # Check if channel already has a dashboard
-                existing = self.dashboard_manager.get_dashboard(interaction.guild.id, interaction.channel.id)
+                existing = await self.dashboard_manager.get_dashboard(interaction.guild.id, interaction.channel.id)
                 if existing:
                     try:
                         channel = self.bot.get_channel(existing['channel_id'])
@@ -915,7 +1109,7 @@ class DashboardCog(commands.Cog):
                             return
                     except discord.NotFound:
                         # Old dashboard was deleted, remove from tracking
-                        self.dashboard_manager.remove_dashboard(interaction.guild.id, interaction.channel.id)
+                        await self.dashboard_manager.remove_dashboard(interaction.guild.id, interaction.channel.id)
                 
                 # Create initial embed
                 embed = await self.dashboard_manager.update_dashboard_embed({
@@ -933,8 +1127,8 @@ class DashboardCog(commands.Cog):
                 # Send message (NOT ephemeral)
                 message = await interaction.followup.send(embed=embed, view=view)
                 
-                # Store dashboard info
-                self.dashboard_manager.add_dashboard(
+                # Store dashboard info in Redis
+                await self.dashboard_manager.add_dashboard(
                     interaction.guild.id,
                     interaction.channel.id,
                     message.id
@@ -967,7 +1161,7 @@ class DashboardCog(commands.Cog):
                 await interaction.followup.send(embed=embed, ephemeral=True)
                 return
             
-            dashboard = self.dashboard_manager.get_dashboard(interaction.guild.id, interaction.channel.id)
+            dashboard = await self.dashboard_manager.get_dashboard(interaction.guild.id, interaction.channel.id)
             
             if not dashboard:
                 embed = discord.Embed(
@@ -977,7 +1171,7 @@ class DashboardCog(commands.Cog):
                 )
                 
                 # Show other dashboards in the server
-                guild_dashboards = self.dashboard_manager.get_guild_dashboards(interaction.guild.id)
+                guild_dashboards = await self.dashboard_manager.get_guild_dashboards(interaction.guild.id)
                 if guild_dashboards:
                     channels_list = []
                     for db in guild_dashboards[:5]:
@@ -1004,8 +1198,8 @@ class DashboardCog(commands.Cog):
             except:
                 pass  # Message already deleted or inaccessible
             
-            # Remove from tracking
-            self.dashboard_manager.remove_dashboard(interaction.guild.id, interaction.channel.id)
+            # Remove from Redis
+            await self.dashboard_manager.remove_dashboard(interaction.guild.id, interaction.channel.id)
             
             embed = discord.Embed(
                 title="✅ Dashboard Removed",
@@ -1176,4 +1370,4 @@ class DashboardCog(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(DashboardCog(bot))
-    logger.info("DashboardCog loaded successfully with persistent storage")
+    logger.info("DashboardCog loaded successfully with Redis storage")
