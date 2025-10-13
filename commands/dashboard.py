@@ -880,7 +880,7 @@ class DashboardManager:
             inline=False
         )
         
-        embed.set_footer(text=f"Shared Dashboard • Auto-updates every 60s • Last updated")
+        embed.set_footer(text=f"Shared Dashboard • Auto-updates every 30s • Last updated")
         
         return embed
     
@@ -989,7 +989,7 @@ class DashboardCog(commands.Cog):
         self.dashboard_update_loop.cancel()
         logger.info("DashboardCog unloaded and update loop stopped")
     
-    @tasks.loop(seconds=60)
+    @tasks.loop(seconds=30)
     async def dashboard_update_loop(self):
         """Update all dashboards every 60 seconds"""
         try:
