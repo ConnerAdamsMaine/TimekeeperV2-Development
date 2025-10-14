@@ -239,7 +239,7 @@ class TimeTrackerConfig(commands.Cog):
             await interaction.followup.send(embed=error_embed, ephemeral=True)
             logger.error(f"Config cmd error: {e}", exc_info=True)
     
-     async def _handle_list_categories(self, interaction: discord.Interaction):
+    async def _handle_list_categories(self, interaction: discord.Interaction):
         """List all categories"""
         categories = await self.tracker.list_categories(interaction.guild.id)
         
