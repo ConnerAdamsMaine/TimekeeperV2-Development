@@ -2,36 +2,6 @@
 # TimekeeperV2 - Premium Time Tracking System
 # Copyright © 2025 404ConnerNotFound. All Rights Reserved.
 # ============================================================================
-#
-# This source code is proprietary and confidential software.
-# 
-# PERMITTED:
-#   - View and study the code for educational purposes
-#   - Reference in technical discussions with attribution
-#   - Report bugs and security issues
-#
-# PROHIBITED:
-#   - Running, executing, or deploying this software yourself
-#   - Hosting your own instance of this bot
-#   - Removing or bypassing the hardware validation (DRM)
-#   - Modifying for production use
-#   - Distributing, selling, or sublicensing
-#   - Any use that competes with the official service
-#
-# USAGE: To use TimekeeperV2, invite the official bot from:
-#        https://timekeeper.404connernotfound.dev
-#
-# This code is provided for transparency only. Self-hosting is strictly
-# prohibited and violates the license terms. Hardware validation is an
-# integral part of this software and protected as a technological measure.
-#
-# NO WARRANTY: Provided "AS IS" without warranty of any kind.
-# NO LIABILITY: Author not liable for any damages from unauthorized use.
-#
-# Full license terms: LICENSE.md (TK-RRL v2.0)
-# Contact: licensing@404connernotfound.dev
-# ============================================================================
-
 
 import discord 
 from discord.ext import commands
@@ -41,7 +11,6 @@ from typing import Optional, Dict, Any, List
 import asyncio
 from datetime import datetime, timedelta
 
-# Import the enhanced shared tracker system
 from Utils.timekeeper import (
     get_shared_role_tracker, 
     get_system_status,
@@ -51,16 +20,11 @@ from Utils.timekeeper import (
     CircuitBreakerOpenError,
     TimeTrackerError
 )
-# from Utils.activation import require_activation_slash
 
-# Configure logging
 logger = logging.getLogger(__name__)
 
 class PredictionCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
-        self.bot = bot
-    
-    def __init__(self, bot):
         self.bot = bot
         self.tracker = None
         self.clock = None
@@ -79,9 +43,9 @@ class PredictionCog(commands.Cog):
         """Initialize enterprise tracker when cog loads"""
         try:
             self.tracker, self.clock = await get_shared_role_tracker(self.bot)
-            logger.info("PredictionCog connected to enterprise tracker system")
+            logger.info("PredictionCog connected")
         except Exception as e:
-            logger.error(f"Failed to initialize timecard admin system: {e}")
+            logger.error(f"Init failed: {e}")
     
     async def cog_unload(self):
         """Cleanup when cog unloads - shared tracker handled by main cog"""
@@ -93,8 +57,8 @@ class PredictionCog(commands.Cog):
             try:
                 self.tracker, self.clock = await get_shared_role_tracker(self.bot)
             except Exception as e:
-                logger.error(f"Failed to reinitialize tracker: {e}")
-                raise commands.CommandError("🔧 Admin system temporarily unavailable. Please try again in a moment.")
+                logger.error(f"Reinit failed: {e}")
+                raise commands.CommandError("🔧 Admin system temporarily unavailable.")
     
     def _create_error_embed(self, result: Dict[str, Any]) -> discord.Embed:
         """Create standardized error embed"""
@@ -134,7 +98,6 @@ class PredictionCog(commands.Cog):
     @app_commands.describe(
         user="Get insights for specific user (optional, admin only)"
     )
-    
     async def insights(self, interaction: discord.Interaction, user: Optional[discord.Member] = None):
         """Advanced productivity insights and analytics"""
         await interaction.response.defer()
@@ -288,7 +251,7 @@ class PredictionCog(commands.Cog):
             self.admin_metrics['insights_generated'] += 1
             
         except Exception as e:
-            logger.error(f"Error in insights command: {e}")
+            logger.error(f"Insights error: {e}")
             embed = self._create_generic_error_embed(e)
             await interaction.followup.send(embed=embed)
 
@@ -299,7 +262,7 @@ class PredictionCog(commands.Cog):
 async def setup(bot):
     """Setup function for the cog"""
     await bot.add_cog(PredictionCog(bot))
-    logger.info("PredictionCog loaded successfully")
+    logger.info("PredictionCog loaded")
 
 async def teardown(bot):
     """Teardown function for the cog"""

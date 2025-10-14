@@ -2,36 +2,6 @@
 # TimekeeperV2 - Premium Time Tracking System
 # Copyright © 2025 404ConnerNotFound. All Rights Reserved.
 # ============================================================================
-#
-# This source code is proprietary and confidential software.
-# 
-# PERMITTED:
-#   - View and study the code for educational purposes
-#   - Reference in technical discussions with attribution
-#   - Report bugs and security issues
-#
-# PROHIBITED:
-#   - Running, executing, or deploying this software yourself
-#   - Hosting your own instance of this bot
-#   - Removing or bypassing the hardware validation (DRM)
-#   - Modifying for production use
-#   - Distributing, selling, or sublicensing
-#   - Any use that competes with the official service
-#
-# USAGE: To use TimekeeperV2, invite the official bot from:
-#        https://timekeeper.404connernotfound.dev
-#
-# This code is provided for transparency only. Self-hosting is strictly
-# prohibited and violates the license terms. Hardware validation is an
-# integral part of this software and protected as a technological measure.
-#
-# NO WARRANTY: Provided "AS IS" without warranty of any kind.
-# NO LIABILITY: Author not liable for any damages from unauthorized use.
-#
-# Full license terms: LICENSE.md (TK-RRL v2.0)
-# Contact: licensing@404connernotfound.dev
-# ============================================================================
-
 
 import discord 
 from discord.ext import commands
@@ -60,13 +30,10 @@ class ActivityLogCog(commands.Cog):
     async def cog_load(self):
         try:
             self.tracker, self.clock = await get_shared_role_tracker(self.bot)
-            
-            # Load saved activity channels
             await self._load_activity_channels()
-            
-            logger.info("ActivityLogCog connected to tracker system")
+            logger.info("ActivityLogCog connected to tracker")
         except Exception as e:
-            logger.error(f"Failed to initialize activity log system: {e}")
+            logger.error(f"Init failed: {e}")
     
     async def _load_activity_channels(self):
         """Load activity channel settings from Redis"""
@@ -89,7 +56,7 @@ class ActivityLogCog(commands.Cog):
             
             logger.info(f"Loaded {len(self.activity_channels)} activity channels")
         except Exception as e:
-            logger.error(f"Error loading activity channels: {e}")
+            logger.error(f"Load channels failed: {e}")
     
     async def _save_activity_channel(self, guild_id: int, channel_id: int):
         """Save activity channel setting to Redis"""
@@ -98,7 +65,7 @@ class ActivityLogCog(commands.Cog):
             await self.tracker.redis.set(key, str(channel_id))
             self.activity_channels[guild_id] = channel_id
         except Exception as e:
-            logger.error(f"Error saving activity channel: {e}")
+            logger.error(f"Save channel failed: {e}")
     
     async def _remove_activity_channel(self, guild_id: int):
         """Remove activity channel setting"""
@@ -107,7 +74,7 @@ class ActivityLogCog(commands.Cog):
             await self.tracker.redis.delete(key)
             self.activity_channels.pop(guild_id, None)
         except Exception as e:
-            logger.error(f"Error removing activity channel: {e}")
+            logger.error(f"Remove channel failed: {e}")
     
     async def log_activity(self, guild_id: int, event_type: str, user: discord.Member, details: dict):
         """Log activity to the designated channel"""
@@ -118,7 +85,7 @@ class ActivityLogCog(commands.Cog):
             
             channel = self.bot.get_channel(channel_id)
             if not channel:
-                logger.warning(f"Activity channel {channel_id} not found for guild {guild_id}")
+                logger.warning(f"Activity channel {channel_id} not found")
                 return
             
             # Create embed based on event type
@@ -209,7 +176,7 @@ class ActivityLogCog(commands.Cog):
             await channel.send(embed=embed)
             
         except Exception as e:
-            logger.error(f"Error logging activity: {e}")
+            logger.error(f"Log activity failed: {e}")
     
     @app_commands.command(name="activitylog", description="⚙️ Configure activity logging channel (Admin only)")
     @app_commands.describe(
@@ -296,8 +263,7 @@ class ActivityLogCog(commands.Cog):
                 test_embed.set_footer(text=f"Configured by {interaction.user.name}")
                 
                 await channel.send(embed=test_embed)
-                
-                logger.info(f"Activity logging enabled for guild {interaction.guild.id} in channel {channel.id}")
+                logger.info(f"Activity log enabled: guild={interaction.guild.id}")
                 
             elif action == "remove":
                 if interaction.guild.id not in self.activity_channels:
@@ -316,8 +282,7 @@ class ActivityLogCog(commands.Cog):
                     description="Activity logging has been disabled for this server.",
                     color=discord.Color.green()
                 )
-                
-                logger.info(f"Activity logging disabled for guild {interaction.guild.id}")
+                logger.info(f"Activity log disabled: guild={interaction.guild.id}")
                 
             elif action == "show":
                 channel_id = self.activity_channels.get(interaction.guild.id)
@@ -361,7 +326,7 @@ class ActivityLogCog(commands.Cog):
             await interaction.followup.send(embed=embed)
             
         except Exception as e:
-            logger.error(f"Error in activitylog command: {e}")
+            logger.error(f"Activitylog cmd error: {e}")
             embed = discord.Embed(
                 title="❌ Error",
                 description=f"An error occurred: {str(e)}",
@@ -372,4 +337,4 @@ class ActivityLogCog(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(ActivityLogCog(bot))
-    logger.info("ActivityLogCog loaded successfully")
+    logger.info("ActivityLogCog loaded")

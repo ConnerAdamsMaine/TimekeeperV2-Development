@@ -21,14 +21,13 @@ class APIManagementCog(commands.Cog):
     async def cog_load(self):
         """Auto-start API if configured"""
         if os.getenv('AUTO_START_API', 'false').lower() == 'true':
-            logger.info("Auto-starting Premium API...")
+            logger.info("Auto-starting API...")
             await self.start_api()
     
     async def cog_unload(self):
         """Stop API when cog unloads"""
         if self.api_running:
-            logger.info("Stopping Premium API...")
-            # The API will stop when the thread ends
+            logger.info("Stopping API...")
             self.api_running = False
     
     async def start_api(self):
@@ -46,17 +45,17 @@ class APIManagementCog(commands.Cog):
                     port = int(os.getenv('API_PORT', 5000))
                     run_api(self.bot, host=host, port=port)
                 except Exception as e:
-                    logger.error(f"API server error: {e}")
+                    logger.error(f"API error: {e}")
             
             self.api_thread = threading.Thread(target=run_api_thread, daemon=True)
             self.api_thread.start()
             self.api_running = True
             
-            logger.info("Premium API started successfully")
+            logger.info("API started")
             return True
             
         except Exception as e:
-            logger.error(f"Failed to start API: {e}")
+            logger.error(f"API start failed: {e}")
             return False
     
     @app_commands.command(name="api", description="🔧 Manage the Premium API server (Dev only)")
@@ -96,7 +95,7 @@ class APIManagementCog(commands.Cog):
                         port = int(os.getenv('API_PORT', 5000))
                         embed = discord.Embed(
                             title="✅ API Started",
-                            description=f"Premium API server started successfully.",
+                            description="Premium API server started successfully.",
                             color=discord.Color.green()
                         )
                         embed.add_field(name="Port", value=str(port), inline=True)
@@ -192,7 +191,7 @@ class APIManagementCog(commands.Cog):
             await interaction.followup.send(embed=embed, ephemeral=True)
             
         except Exception as e:
-            logger.error(f"Error in api command: {e}")
+            logger.error(f"API cmd error: {e}")
             embed = discord.Embed(
                 title="❌ Error",
                 description=f"An error occurred: {str(e)}",
@@ -203,4 +202,4 @@ class APIManagementCog(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(APIManagementCog(bot))
-    logger.info("APIManagementCog loaded successfully")
+    logger.info("APIManagementCog loaded")

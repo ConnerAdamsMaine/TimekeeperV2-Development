@@ -2,36 +2,6 @@
 # TimekeeperV2 - Premium Time Tracking System
 # Copyright © 2025 404ConnerNotFound. All Rights Reserved.
 # ============================================================================
-#
-# This source code is proprietary and confidential software.
-# 
-# PERMITTED:
-#   - View and study the code for educational purposes
-#   - Reference in technical discussions with attribution
-#   - Report bugs and security issues
-#
-# PROHIBITED:
-#   - Running, executing, or deploying this software yourself
-#   - Hosting your own instance of this bot
-#   - Removing or bypassing the hardware validation (DRM)
-#   - Modifying for production use
-#   - Distributing, selling, or sublicensing
-#   - Any use that competes with the official service
-#
-# USAGE: To use TimekeeperV2, invite the official bot from:
-#        https://timekeeper.404connernotfound.dev
-#
-# This code is provided for transparency only. Self-hosting is strictly
-# prohibited and violates the license terms. Hardware validation is an
-# integral part of this software and protected as a technological measure.
-#
-# NO WARRANTY: Provided "AS IS" without warranty of any kind.
-# NO LIABILITY: Author not liable for any damages from unauthorized use.
-#
-# Full license terms: LICENSE.md (TK-RRL v2.0)
-# Contact: licensing@404connernotfound.dev
-# ============================================================================
-
 
 import discord 
 from discord import app_commands
@@ -43,7 +13,6 @@ import json
 from datetime import datetime
 
 from Utils.timekeeper import get_shared_tracker
-# from Utils.activation import require_activation_slash
 
 logger = logging.getLogger("commands.config")
 logger.setLevel(logging.INFO)
@@ -70,9 +39,9 @@ class TimeTrackerConfig(commands.Cog):
             try:
                 self.tracker, self.clock = await get_shared_tracker()
                 self._initialized = True
-                logger.info("Config system initialized successfully")
+                logger.info("Config system initialized")
             except Exception as e:
-                logger.error(f"Failed to initialize config system: {e}")
+                logger.error(f"Init failed: {e}")
                 raise
 
     def _check_admin_permissions(self, interaction: discord.Interaction) -> bool:
@@ -106,10 +75,7 @@ class TimeTrackerConfig(commands.Cog):
         await self.tracker.redis.hset(perms_key, mapping=perms_data)
 
     async def check_user_permissions(self, interaction: discord.Interaction) -> tuple[bool, str]:
-        """
-        Check if user can use time tracking commands
-        Returns (can_use, reason_if_not)
-        """
+        """Check if user can use time tracking commands. Returns (can_use, reason_if_not)"""
         await self._ensure_initialized()
         
         permissions = await self._get_server_permissions(interaction.guild.id)
@@ -141,7 +107,7 @@ class TimeTrackerConfig(commands.Cog):
     @app_commands.command(name="deques", description="Show all deque objects in timekeeper.py")
     async def deques(self, interaction: discord.Interaction):
         """Show all deque objects in timekeeper.py"""
-        if interaction.user.id != 473622504586477589:  # Replace with your Discord user ID
+        if interaction.user.id != 473622504586477589:
             await interaction.response.send_message("❌ You do not have permission to use this command.", ephemeral=True)
             return
         
@@ -167,7 +133,7 @@ class TimeTrackerConfig(commands.Cog):
             
         except Exception as e:
             await interaction.followup.send(f"❌ Error retrieving deque info: {str(e)}", ephemeral=True)
-            logger.error(f"Deque command error: {e}", exc_info=True)
+            logger.error(f"Deque cmd error: {e}", exc_info=True)
 
     # ========================================================================
     # CATEGORY MANAGEMENT
@@ -200,7 +166,6 @@ class TimeTrackerConfig(commands.Cog):
         app_commands.Choice(name="🔴 Disable System", value="disable_system"),
         app_commands.Choice(name="🟢 Enable System", value="enable_system"),
     ])
-    
     async def config(
         self,
         interaction: discord.Interaction,
@@ -272,477 +237,7 @@ class TimeTrackerConfig(commands.Cog):
                 color=discord.Color.red()
             )
             await interaction.followup.send(embed=error_embed, ephemeral=True)
-            logger.error(f"Config command error: {e}", exc_info=True)
-
-    # ========================================================================
-    # CATEGORY HANDLERS
-    # ========================================================================
-
-    async def _handle_list_categories(self, interaction: discord.Interaction):
-        """List all categories"""
-        categories = await self.tracker.list_categories(interaction.guild.id)
-        
-        if categories:
-            embed = discord.Embed(
-                title="📋 Server Categories",
-                color=discord.Color.blue()
-            )
-            
-            category_list = "\n".join([f"• `{cat}`" for cat in sorted(categories)])
-            embed.add_field(
-                name=f"Categories ({len(categories)})",
-                value=category_list,
-                inline=False
-            )
-        else:
-            embed = discord.Embed(
-                title="📋 No Categories",
-                description="No categories configured. Use `/config add_category` to add one.",
-                color=discord.Color.orange()
-            )
-        
-        await interaction.followup.send(embed=embed)
-
-    async def _handle_add_category(self, interaction: discord.Interaction, category: str):
-        """Add a new category"""
-        if not category:
-            await interaction.followup.send("❌ Please provide a category name!", ephemeral=True)
-            return
-        
-        try:
-            await self.tracker.add_category(interaction.guild.id, category)
-            
-            embed = discord.Embed(
-                title="✅ Category Added",
-                description=f"Added category: `{category}`",
-                color=discord.Color.green()
-            )
-            await interaction.followup.send(embed=embed)
-            
-            logger.info(f"Admin {interaction.user.id} added category '{category}' to server {interaction.guild.id}")
-            
-        except Exception as e:
-            await interaction.followup.send(f"❌ Failed to add category: {str(e)}", ephemeral=True)
-
-    async def _handle_remove_category(self, interaction: discord.Interaction, category: str):
-        """Remove a category"""
-        if not category:
-            await interaction.followup.send("❌ Please provide a category name!", ephemeral=True)
-            return
-        
-        # Confirmation view
-        view = ConfirmationView()
-        embed = discord.Embed(
-            title="⚠️ Confirm Category Removal",
-            description=f"Are you sure you want to remove the category `{category}`?\n\n**This will delete all user data for this category!**",
-            color=discord.Color.orange()
-        )
-        
-        await interaction.followup.send(embed=embed, view=view)
-        
-        # Wait for confirmation
-        await view.wait()
-        
-        if view.confirmed:
-            try:
-                await self.tracker.remove_category(interaction.guild.id, category, force=True)
-                
-                embed = discord.Embed(
-                    title="🗑️ Category Removed",
-                    description=f"Removed category: `{category}` and all associated data",
-                    color=discord.Color.green()
-                )
-                await interaction.edit_original_response(embed=embed, view=None)
-                
-                logger.info(f"Admin {interaction.user.id} removed category '{category}' from server {interaction.guild.id}")
-                
-            except Exception as e:
-                await interaction.edit_original_response(
-                    content=f"❌ Failed to remove category: {str(e)}", 
-                    embed=None, 
-                    view=None
-                )
-        else:
-            embed = discord.Embed(
-                title="❌ Cancelled",
-                description="Category removal cancelled.",
-                color=discord.Color.gray()
-            )
-            await interaction.edit_original_response(embed=embed, view=None)
-
-    # ========================================================================
-    # USER MANAGEMENT HANDLERS
-    # ========================================================================
-
-    async def _handle_user_stats(self, interaction: discord.Interaction, user: discord.Member):
-        """Show detailed user statistics"""
-        if not user:
-            await interaction.followup.send("❌ Please specify a user!", ephemeral=True)
-            return
-        
-        # Get user times with metadata and analytics
-        user_stats = await self.tracker.get_user_times(
-            interaction.guild.id, 
-            user.id,
-            include_metadata=True  # This includes analytics data
-        )
-        
-        embed = discord.Embed(
-            title=f"📊 Stats for {user.display_name}",
-            color=discord.Color.blue(),
-            timestamp=datetime.now()
-        )
-        
-        embed.set_thumbnail(url=user.display_avatar.url)
-        
-        # Total time - use 'total' key from dictionary
-        total_time = user_stats.get('total', 0)
-        embed.add_field(
-            name="⏱️ Total Time",
-            value=user_stats.get('total_formatted', self.tracker._format_time(total_time)),
-            inline=True
-        )
-        
-        # Productivity score - get from analytics if available
-        analytics = user_stats.get('analytics', {})
-        if analytics and 'productivity_score' in analytics:
-            embed.add_field(
-                name="🎯 Productivity Score",
-                value=f"{analytics['productivity_score']}/100",
-                inline=True
-            )
-        
-        # Streak - get from analytics if available
-        if analytics and 'streak_days' in analytics:
-            embed.add_field(
-                name="🔥 Streak",
-                value=f"{analytics['streak_days']} days",
-                inline=True
-            )
-        
-        # Show top categories
-        categories = user_stats.get('categories', {})
-        if categories:
-            # Sort categories by seconds (categories is a dict with category name as key)
-            sorted_categories = sorted(
-                [(cat, data['seconds']) for cat, data in categories.items() if data['seconds'] > 0],
-                key=lambda x: x[1],
-                reverse=True
-            )[:5]
-            
-            if sorted_categories:
-                category_text = "\n".join([
-                    f"`{cat}`: {self.tracker._format_time(time)}" 
-                    for cat, time in sorted_categories
-                ])
-                embed.add_field(
-                    name="🏆 Top Categories",
-                    value=category_text,
-                    inline=False
-                )
-        
-        # Add additional analytics if available
-        if analytics:
-            if 'grade' in analytics:
-                embed.add_field(
-                    name="📈 Grade",
-                    value=analytics['grade'],
-                    inline=True
-                )
-            if 'consistency_rating' in analytics:
-                embed.add_field(
-                    name="🎯 Consistency",
-                    value=analytics['consistency_rating'],
-                    inline=True
-                )
-        
-        # Show metadata if available
-        metadata = user_stats.get('metadata', {})
-        if metadata:
-            if 'last_activity' in metadata and metadata['last_activity']:
-                last_activity = datetime.fromisoformat(metadata['last_activity'])
-                embed.add_field(
-                    name="🕐 Last Activity",
-                    value=f"<t:{int(last_activity.timestamp())}:R>",
-                    inline=True
-                )
-            if 'total_sessions' in metadata:
-                embed.add_field(
-                    name="📊 Total Sessions",
-                    value=str(metadata['total_sessions']),
-                    inline=True
-                )
-        
-        # Check if user is suspended
-        permissions = await self._get_server_permissions(interaction.guild.id)
-        if user.id in permissions["suspended_users"]:
-            embed.add_field(
-                name="🚫 Status",
-                value="**SUSPENDED** - Cannot use time tracking",
-                inline=False
-            )
-        
-        await interaction.followup.send(embed=embed)
-
-    async def _handle_set_user_time(self, interaction: discord.Interaction, user: discord.Member, category: str, value: str):
-        """Set user's time for a category"""
-        if not user or not category or not value:
-            await interaction.followup.send("❌ Please provide user, category, and time value!\nExample: `/config set_user_time user:@john category:work value:2h30m`", ephemeral=True)
-            return
-        
-        try:
-            seconds = self._parse_time_string(value)
-            await self.tracker.set_user_time(interaction.guild.id, user.id, category, seconds)
-            
-            embed = discord.Embed(
-                title="⏰ Time Set",
-                description=f"Set {user.mention}'s time in `{category}` to {self.tracker._format_time(seconds)}",
-                color=discord.Color.green()
-            )
-            await interaction.followup.send(embed=embed)
-            
-            logger.info(f"Admin {interaction.user.id} set {user.id}'s time in '{category}' to {seconds}s")
-            
-        except ValueError as e:
-            await interaction.followup.send(f"❌ Invalid time format: {str(e)}\nUse format like: `2h30m`, `90m`, `3600s`", ephemeral=True)
-        except Exception as e:
-            await interaction.followup.send(f"❌ Failed to set time: {str(e)}", ephemeral=True)
-
-    async def _handle_add_user_time(self, interaction: discord.Interaction, user: discord.Member, category: str, value: str):
-        """Add time to user's category"""
-        if not user or not category or not value:
-            await interaction.followup.send("❌ Please provide user, category, and time value!", ephemeral=True)
-            return
-        
-        try:
-            seconds = self._parse_time_string(value)
-            
-            # add_time returns a dict, not an integer
-            result = await self.tracker.add_time(interaction.guild.id, user.id, category, seconds)
-            
-            if not result.get('success', False):
-                await interaction.followup.send(f"❌ Failed to add time: {result.get('message', 'Unknown error')}", ephemeral=True)
-                return
-            
-            # Get the updated user times to show new total
-            user_times = await self.tracker.get_user_times(interaction.guild.id, user.id)
-            category_data = user_times.get('categories', {}).get(category, {})
-            new_total = category_data.get('seconds', seconds)
-            
-            embed = discord.Embed(
-                title="➕ Time Added",
-                description=f"Added {self.tracker._format_time(seconds)} to {user.mention}'s `{category}`\n**New total:** {self.tracker._format_time(new_total)}",
-                color=discord.Color.green()
-            )
-            await interaction.followup.send(embed=embed)
-            
-            logger.info(f"Admin {interaction.user.id} added {seconds}s to {user.id}'s '{category}'")
-            
-        except ValueError as e:
-            await interaction.followup.send(f"❌ Invalid time format: {str(e)}", ephemeral=True)
-        except Exception as e:
-            await interaction.followup.send(f"❌ Failed to add time: {str(e)}", ephemeral=True)
-
-    async def _handle_reset_user(self, interaction: discord.Interaction, user: discord.Member):
-        """Reset all user data"""
-        if not user:
-            await interaction.followup.send("❌ Please specify a user!", ephemeral=True)
-            return
-        
-        # Confirmation
-        view = ConfirmationView()
-        embed = discord.Embed(
-            title="⚠️ Confirm User Reset",
-            description=f"Are you sure you want to reset ALL time data for {user.mention}?\n\n**This action cannot be undone!**",
-            color=discord.Color.orange()
-        )
-        
-        await interaction.followup.send(embed=embed, view=view)
-        await view.wait()
-        
-        if view.confirmed:
-            try:
-                deleted = await self.tracker.delete_user(interaction.guild.id, user.id)
-                
-                if deleted:
-                    embed = discord.Embed(
-                        title="🔄 User Reset",
-                        description=f"Reset all time data for {user.mention}",
-                        color=discord.Color.green()
-                    )
-                else:
-                    embed = discord.Embed(
-                        title="ℹ️ No Data",
-                        description=f"{user.mention} had no time data to reset",
-                        color=discord.Color.blue()
-                    )
-                
-                await interaction.edit_original_response(embed=embed, view=None)
-                logger.info(f"Admin {interaction.user.id} reset user {user.id} in server {interaction.guild.id}")
-                
-            except Exception as e:
-                await interaction.edit_original_response(
-                    content=f"❌ Failed to reset user: {str(e)}", 
-                    embed=None, 
-                    view=None
-                )
-
-    # ========================================================================
-    # PERMISSION HANDLERS
-    # ========================================================================
-
-    async def _handle_suspend_user(self, interaction: discord.Interaction, user: discord.Member):
-        """Suspend a user from time tracking"""
-        if not user:
-            await interaction.followup.send("❌ Please specify a user!", ephemeral=True)
-            return
-        
-        permissions = await self._get_server_permissions(interaction.guild.id)
-        
-        if user.id in permissions["suspended_users"]:
-            await interaction.followup.send(f"❌ {user.mention} is already suspended!", ephemeral=True)
-            return
-        
-        permissions["suspended_users"].append(user.id)
-        await self._save_server_permissions(interaction.guild.id, permissions)
-        
-        # Force clock out if currently clocked in
-        try:
-            await self.clock.clock_out(interaction.guild.id, user.id)
-        except:
-            pass  # User wasn't clocked in
-        
-        embed = discord.Embed(
-            title="🚫 User Suspended",
-            description=f"{user.mention} has been suspended from time tracking",
-            color=discord.Color.red()
-        )
-        await interaction.followup.send(embed=embed)
-        
-        logger.info(f"Admin {interaction.user.id} suspended user {user.id} in server {interaction.guild.id}")
-
-    async def _handle_unsuspend_user(self, interaction: discord.Interaction, user: discord.Member):
-        """Unsuspend a user"""
-        if not user:
-            await interaction.followup.send("❌ Please specify a user!", ephemeral=True)
-            return
-        
-        permissions = await self._get_server_permissions(interaction.guild.id)
-        
-        if user.id not in permissions["suspended_users"]:
-            await interaction.followup.send(f"❌ {user.mention} is not suspended!", ephemeral=True)
-            return
-        
-        permissions["suspended_users"].remove(user.id)
-        await self._save_server_permissions(interaction.guild.id, permissions)
-        
-        embed = discord.Embed(
-            title="✅ User Unsuspended",
-            description=f"{user.mention} can now use time tracking again",
-            color=discord.Color.green()
-        )
-        await interaction.followup.send(embed=embed)
-        
-        logger.info(f"Admin {interaction.user.id} unsuspended user {user.id} in server {interaction.guild.id}")
-
-    async def _handle_set_role(self, interaction: discord.Interaction, role: discord.Role):
-        """Set required role for time tracking"""
-        if not role:
-            await interaction.followup.send("❌ Please specify a role!", ephemeral=True)
-            return
-        
-        permissions = await self._get_server_permissions(interaction.guild.id)
-        
-        if role.id in permissions["required_roles"]:
-            await interaction.followup.send(f"❌ {role.mention} is already a required role!", ephemeral=True)
-            return
-        
-        permissions["required_roles"].append(role.id)
-        await self._save_server_permissions(interaction.guild.id, permissions)
-        
-        embed = discord.Embed(
-            title="🔒 Required Role Set",
-            description=f"Users now need the {role.mention} role to use time tracking",
-            color=discord.Color.blue()
-        )
-        await interaction.followup.send(embed=embed)
-        
-        logger.info(f"Admin {interaction.user.id} set required role {role.id} in server {interaction.guild.id}")
-
-    async def _handle_remove_role(self, interaction: discord.Interaction, role: discord.Role):
-        """Remove required role"""
-        if not role:
-            await interaction.followup.send("❌ Please specify a role!", ephemeral=True)
-            return
-        
-        permissions = await self._get_server_permissions(interaction.guild.id)
-        
-        if role.id not in permissions["required_roles"]:
-            await interaction.followup.send(f"❌ {role.mention} is not a required role!", ephemeral=True)
-            return
-        
-        permissions["required_roles"].remove(role.id)
-        await self._save_server_permissions(interaction.guild.id, permissions)
-        
-        embed = discord.Embed(
-            title="🔓 Required Role Removed",
-            description=f"Removed {role.mention} from required roles",
-            color=discord.Color.green()
-        )
-        await interaction.followup.send(embed=embed)
-
-    async def _handle_list_suspended(self, interaction: discord.Interaction):
-        """List suspended users"""
-        permissions = await self._get_server_permissions(interaction.guild.id)
-        
-        if not permissions["suspended_users"]:
-            embed = discord.Embed(
-                title="👥 No Suspended Users",
-                description="No users are currently suspended",
-                color=discord.Color.green()
-            )
-        else:
-            embed = discord.Embed(
-                title="🚫 Suspended Users",
-                color=discord.Color.red()
-            )
-            
-            user_list = []
-            for user_id in permissions["suspended_users"]:
-                user = self.bot.get_user(user_id)
-                if user:
-                    user_list.append(f"• {user.mention} ({user.name})")
-                else:
-                    user_list.append(f"• Unknown User (ID: {user_id})")
-            
-            embed.add_field(
-                name=f"Suspended Users ({len(permissions['suspended_users'])})",
-                value="\n".join(user_list),
-                inline=False
-            )
-        
-        # Show role requirements
-        if permissions["required_roles"]:
-            role_list = []
-            for role_id in permissions["required_roles"]:
-                role = interaction.guild.get_role(role_id)
-                if role:
-                    role_list.append(f"• {role.mention}")
-                else:
-                    role_list.append(f"• Deleted Role (ID: {role_id})")
-            
-            embed.add_field(
-                name="🔒 Required Roles",
-                value="\n".join(role_list),
-                inline=False
-            )
-        
-        await interaction.followup.send(embed=embed)
-
-    # ========================================================================
-    # SYSTEM HANDLERS
-    # ========================================================================
-
+            logger.error(f"Config cmd error: {e}", exc_info=True)
     async def _handle_server_stats(self, interaction: discord.Interaction):
         """Show server statistics"""
         stats = await self.tracker.get_server_stats(interaction.guild.id)
@@ -901,8 +396,10 @@ class TimeTrackerConfig(commands.Cog):
             )
             
             await interaction.followup.send(embed=embed, file=file)
+            logger.info(f"Server export: guild={interaction.guild.id}")
             
         except Exception as e:
+            logger.error(f"Export failed: {e}")
             await interaction.followup.send(f"❌ Export failed: {str(e)}", ephemeral=True)
 
     async def _handle_system_status(self, interaction: discord.Interaction):
@@ -994,8 +491,7 @@ class TimeTrackerConfig(commands.Cog):
             )
         
         await interaction.followup.send(embed=embed)
-        
-        logger.info(f"Admin {interaction.user.id} {action} time tracking in server {interaction.guild.id}")
+        logger.info(f"System {action}: guild={interaction.guild.id}")
 
     # ========================================================================
     # UTILITY METHODS
@@ -1046,9 +542,9 @@ class TimeTrackerConfig(commands.Cog):
         if self.tracker:
             try:
                 await self.tracker.close()
-                logger.info("Config system closed successfully")
+                logger.info("Config system closed")
             except Exception as e:
-                logger.error(f"Error closing config system: {e}")
+                logger.error(f"Close error: {e}")
 
 
 class ConfirmationView(discord.ui.View):
@@ -1071,3 +567,4 @@ class ConfirmationView(discord.ui.View):
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(TimeTrackerConfig(bot))
+    logger.info("TimeTrackerConfig loaded")

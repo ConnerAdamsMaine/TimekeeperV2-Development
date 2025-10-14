@@ -2,36 +2,6 @@
 # TimekeeperV2 - Premium Time Tracking System
 # Copyright © 2025 404ConnerNotFound. All Rights Reserved.
 # ============================================================================
-#
-# This source code is proprietary and confidential software.
-# 
-# PERMITTED:
-#   - View and study the code for educational purposes
-#   - Reference in technical discussions with attribution
-#   - Report bugs and security issues
-#
-# PROHIBITED:
-#   - Running, executing, or deploying this software yourself
-#   - Hosting your own instance of this bot
-#   - Removing or bypassing the hardware validation (DRM)
-#   - Modifying for production use
-#   - Distributing, selling, or sublicensing
-#   - Any use that competes with the official service
-#
-# USAGE: To use TimekeeperV2, invite the official bot from:
-#        https://timekeeper.404connernotfound.dev
-#
-# This code is provided for transparency only. Self-hosting is strictly
-# prohibited and violates the license terms. Hardware validation is an
-# integral part of this software and protected as a technological measure.
-#
-# NO WARRANTY: Provided "AS IS" without warranty of any kind.
-# NO LIABILITY: Author not liable for any damages from unauthorized use.
-#
-# Full license terms: LICENSE.md (TK-RRL v2.0)
-# Contact: licensing@404connernotfound.dev
-# ============================================================================
-
 
 import discord 
 from discord.ext import commands
@@ -61,9 +31,9 @@ class ExportCog(commands.Cog):
     async def cog_load(self):
         try:
             self.tracker, self.clock = await get_shared_role_tracker(self.bot)
-            logger.info("ExportCog connected to tracker system")
+            logger.info("ExportCog connected")
         except Exception as e:
-            logger.error(f"Failed to initialize export system: {e}")
+            logger.error(f"Init failed: {e}")
     
     async def _ensure_initialized(self):
         if not self.tracker or not self.clock:
@@ -319,10 +289,10 @@ CATEGORY BREAKDOWN
             )
             
             await interaction.followup.send(embed=embed, file=file, ephemeral=True)
-            logger.info(f"User {interaction.user.id} exported data for {target_user.id} as {format}")
+            logger.info(f"Export: user={target_user.id}, format={format}")
             
         except Exception as e:
-            logger.error(f"Error in export command: {e}")
+            logger.error(f"Export failed: {e}")
             embed = discord.Embed(
                 title="❌ Export Failed",
                 description=f"An error occurred while exporting: {str(e)}",
@@ -333,4 +303,4 @@ CATEGORY BREAKDOWN
 
 async def setup(bot):
     await bot.add_cog(ExportCog(bot))
-    logger.info("ExportCog loaded successfully")
+    logger.info("ExportCog loaded")
