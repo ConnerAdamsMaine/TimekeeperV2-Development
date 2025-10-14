@@ -3,687 +3,1059 @@
 # Copyright © 2025 404ConnerNotFound. All Rights Reserved.
 # ============================================================================
 
-import discord 
-from discord import app_commands
+import discord
 from discord.ext import commands
-from typing import Optional, List, Dict, Any
+from discord import app_commands
 import logging
+from typing import Optional, Dict, Any, List
 import asyncio
-import json
 from datetime import datetime
+import json
+import os
 
-from Utils.timekeeper import get_shared_tracker
+from Utils.timekeeper import get_shared_role_tracker
 
-logger = logging.getLogger("commands.config")
-logger.setLevel(logging.INFO)
+logger = logging.getLogger(__name__)
 
-class TimeTrackerConfig(commands.Cog):
-    """Configuration and administration for the time tracking system"""
+
+class HelpSupportCog(commands.Cog):
+    """Comprehensive help, guide, and support system"""
     
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot):
         self.bot = bot
         self.tracker = None
         self.clock = None
-        self._initialization_lock = asyncio.Lock()
-        self._initialized = False
-
-    async def _ensure_initialized(self):
-        """Ensure the tracker and clock are initialized"""
-        if self._initialized:
-            return
         
-        async with self._initialization_lock:
-            if self._initialized:
+        # Support ticket system
+        self.active_tickets = {}  # user_id -> ticket_data
+        self.ticket_counter = 0
+        
+        logger.info("HelpSupportCog initialized")
+    
+    async def cog_load(self):
+        try:
+            self.tracker, self.clock = await get_shared_role_tracker(self.bot)
+            await self._load_tickets()
+            logger.info("HelpSupportCog connected")
+        except Exception as e:
+            logger.error(f"Init failed: {e}")
+    
+    async def _load_tickets(self):
+        """Load active tickets from Redis"""
+        try:
+            if not self.tracker:
                 return
             
-            try:
-                self.tracker, self.clock = await get_shared_tracker()
-                self._initialized = True
-                logger.info("Config system initialized")
-            except Exception as e:
-                logger.error(f"Init failed: {e}")
-                raise
-
-    def _check_admin_permissions(self, interaction: discord.Interaction) -> bool:
-        """Check if user has admin permissions"""
-        return (interaction.user.guild_permissions.manage_guild or 
-                interaction.user.guild_permissions.administrator)
-
-    async def _get_server_permissions(self, server_id: int) -> Dict[str, Any]:
-        """Get server permission settings"""
-        await self._ensure_initialized()
-        perms_key = f"permissions:{server_id}"
-        perms_data = await self.tracker.redis.hgetall(perms_key)
-        
-        return {
-            "required_roles": json.loads(perms_data.get("required_roles", "[]")),
-            "suspended_users": json.loads(perms_data.get("suspended_users", "[]")),
-            "admin_roles": json.loads(perms_data.get("admin_roles", "[]")),
-            "enabled": perms_data.get("enabled", "true") == "true"
-        }
-
-    async def _save_server_permissions(self, server_id: int, permissions: Dict[str, Any]):
-        """Save server permission settings"""
-        perms_key = f"permissions:{server_id}"
-        perms_data = {
-            "required_roles": json.dumps(permissions.get("required_roles", [])),
-            "suspended_users": json.dumps(permissions.get("suspended_users", [])),
-            "admin_roles": json.dumps(permissions.get("admin_roles", [])),
-            "enabled": str(permissions.get("enabled", True)).lower(),
-            "updated_at": datetime.now().isoformat()
-        }
-        await self.tracker.redis.hset(perms_key, mapping=perms_data)
-
-    async def check_user_permissions(self, interaction: discord.Interaction) -> tuple[bool, str]:
-        """Check if user can use time tracking commands. Returns (can_use, reason_if_not)"""
-        await self._ensure_initialized()
-        
-        permissions = await self._get_server_permissions(interaction.guild.id)
-        
-        # Check if system is enabled
-        if not permissions["enabled"]:
-            return False, "Time tracking is currently disabled on this server."
-        
-        # Check if user is suspended
-        if interaction.user.id in permissions["suspended_users"]:
-            return False, "You are suspended from using time tracking commands."
-        
-        # Check role requirements
-        if permissions["required_roles"]:
-            user_role_ids = [role.id for role in interaction.user.roles]
-            if not any(role_id in user_role_ids for role_id in permissions["required_roles"]):
-                role_names = []
-                for role_id in permissions["required_roles"]:
-                    role = interaction.guild.get_role(role_id)
-                    if role:
-                        role_names.append(role.name)
-                return False, f"You need one of these roles: {', '.join(role_names)}"
-        
-        return True, ""
+            tickets_data = await self.tracker.redis.get("support_tickets")
+            if tickets_data:
+                self.active_tickets = json.loads(tickets_data)
+                self.ticket_counter = await self.tracker.redis.get("ticket_counter") or 0
+                logger.info(f"Loaded {len(self.active_tickets)} tickets")
+        except Exception as e:
+            logger.error(f"Load tickets failed: {e}")
+    
+    async def _save_tickets(self):
+        """Save tickets to Redis"""
+        try:
+            if not self.tracker:
+                return
+            
+            await self.tracker.redis.set("support_tickets", json.dumps(self.active_tickets))
+            await self.tracker.redis.set("ticket_counter", self.ticket_counter)
+        except Exception as e:
+            logger.error(f"Save tickets failed: {e}")
     
     # ========================================================================
-    # DEV MANAGEMENT
-    # ========================================================================    
-    @app_commands.command(name="deques", description="Show all deque objects in timekeeper.py")
-    async def deques(self, interaction: discord.Interaction):
-        """Show all deque objects in timekeeper.py"""
-        if interaction.user.id != 473622504586477589:
-            await interaction.response.send_message("❌ You do not have permission to use this command.", ephemeral=True)
-            return
-        
-        await self._ensure_initialized()
-        await interaction.response.defer()
-        
-        try:
-            import inspect
-            import collections
-            from Utils import timekeeper
-            
-            deque_info = []
-            for name, obj in inspect.getmembers(timekeeper):
-                if isinstance(obj, collections.deque):
-                    deque_info.append(f"• `{name}`: {len(obj)} items")
-            
-            if not deque_info:
-                message = "No deque objects found in timekeeper.py."
-            else:
-                message = "Deque objects in timekeeper.py:\n" + "\n".join(deque_info)
-            
-            await interaction.followup.send(message, ephemeral=True)
-            
-        except Exception as e:
-            await interaction.followup.send(f"❌ Error retrieving deque info: {str(e)}", ephemeral=True)
-            logger.error(f"Deque cmd error: {e}", exc_info=True)
-
+    # HELP COMMAND - Interactive and Comprehensive
     # ========================================================================
-    # CATEGORY MANAGEMENT
-    # ========================================================================
-    @app_commands.command(name="config", description="Configure time tracking settings (Admin only)")
+    
+    @app_commands.command(name="help", description="📚 Get help with Timekeeper commands")
     @app_commands.describe(
-        action="Configuration action to perform",
-        category="Category name (for category actions)",
-        user="User to manage (for user actions)",
-        role="Role to manage (for permission actions)",
-        value="Value to set"
+        category="Specific category to get help with"
     )
-    @app_commands.choices(action=[
-        app_commands.Choice(name="📋 List Categories", value="list_categories"),
-        app_commands.Choice(name="➕ Add Category", value="add_category"),
-        app_commands.Choice(name="🗑️ Remove Category", value="remove_category"),
-        app_commands.Choice(name="👤 User Stats", value="user_stats"),
-        app_commands.Choice(name="⏰ Set User Time", value="set_user_time"),
-        app_commands.Choice(name="➕ Add User Time", value="add_user_time"),
-        app_commands.Choice(name="🔄 Reset User", value="reset_user"),
-        app_commands.Choice(name="🚫 Suspend User", value="suspend_user"),
-        app_commands.Choice(name="✅ Unsuspend User", value="unsuspend_user"),
-        app_commands.Choice(name="🔒 Set Required Role", value="set_role"),
-        app_commands.Choice(name="🔓 Remove Required Role", value="remove_role"),
-        app_commands.Choice(name="👥 List Suspended", value="list_suspended"),
-        app_commands.Choice(name="📊 Server Stats", value="server_stats"),
-        app_commands.Choice(name="🏆 Leaderboard", value="leaderboard"),
-        app_commands.Choice(name="📥 Export Data", value="export"),
-        app_commands.Choice(name="⚙️ System Status", value="system_status"),
-        app_commands.Choice(name="🔴 Disable System", value="disable_system"),
-        app_commands.Choice(name="🟢 Enable System", value="enable_system"),
+    @app_commands.choices(category=[
+        app_commands.Choice(name="⏰ Time Tracking", value="tracking"),
+        app_commands.Choice(name="📊 Analytics & Stats", value="analytics"),
+        app_commands.Choice(name="👑 Admin Commands", value="admin"),
+        app_commands.Choice(name="🎯 Dashboard", value="dashboard"),
+        app_commands.Choice(name="📥 Export & Data", value="export"),
+        app_commands.Choice(name="🔧 Configuration", value="config"),
     ])
-    async def config(
-        self,
-        interaction: discord.Interaction,
-        action: str,
-        category: Optional[str] = None,
-        user: Optional[discord.Member] = None,
-        role: Optional[discord.Role] = None,
-        value: Optional[str] = None
-    ):
-        """Main configuration command"""
-        
-        # Check admin permissions
-        if not self._check_admin_permissions(interaction):
-            embed = discord.Embed(
-                title="❌ Permission Denied",
-                description="You need 'Manage Server' permission to use this command.",
-                color=discord.Color.red()
-            )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
-
-        await self._ensure_initialized()
+    async def help_command(self, interaction: discord.Interaction, category: Optional[str] = None):
+        """Comprehensive interactive help system"""
         await interaction.response.defer()
-
-        try:
-            if action == "list_categories":
-                await self._handle_list_categories(interaction)
-            elif action == "add_category":
-                await self._handle_add_category(interaction, category)
-            elif action == "remove_category":
-                await self._handle_remove_category(interaction, category)
-            elif action == "user_stats":
-                await self._handle_user_stats(interaction, user)
-            elif action == "set_user_time":
-                await self._handle_set_user_time(interaction, user, category, value)
-            elif action == "add_user_time":
-                await self._handle_add_user_time(interaction, user, category, value)
-            elif action == "reset_user":
-                await self._handle_reset_user(interaction, user)
-            elif action == "suspend_user":
-                await self._handle_suspend_user(interaction, user)
-            elif action == "unsuspend_user":
-                await self._handle_unsuspend_user(interaction, user)
-            elif action == "set_role":
-                await self._handle_set_role(interaction, role)
-            elif action == "remove_role":
-                await self._handle_remove_role(interaction, role)
-            elif action == "list_suspended":
-                await self._handle_list_suspended(interaction)
-            elif action == "server_stats":
-                await self._handle_server_stats(interaction)
-            elif action == "leaderboard":
-                await self._handle_leaderboard(interaction, category)
-            elif action == "export":
-                await self._handle_export(interaction)
-            elif action == "system_status":
-                await self._handle_system_status(interaction)
-            elif action == "disable_system":
-                await self._handle_toggle_system(interaction, False)
-            elif action == "enable_system":
-                await self._handle_toggle_system(interaction, True)
-            else:
-                await interaction.followup.send("❌ Unknown action!", ephemeral=True)
-
-        except Exception as e:
-            error_embed = discord.Embed(
-                title="❌ Configuration Error",
-                description=f"An error occurred: {str(e)}",
-                color=discord.Color.red()
-            )
-            await interaction.followup.send(embed=error_embed, ephemeral=True)
-            logger.error(f"Config cmd error: {e}", exc_info=True)
-    
-    async def _handle_list_categories(self, interaction: discord.Interaction):
-        """List all categories"""
-        categories = await self.tracker.list_categories(interaction.guild.id)
         
-        if categories:
+        if category:
+            embed = await self._create_category_help(category)
+        else:
+            embed = await self._create_main_help()
+        
+        # Create navigation view
+        view = HelpNavigationView(self)
+        
+        await interaction.followup.send(embed=embed, view=view)
+    
+    async def _create_main_help(self) -> discord.Embed:
+        """Create main help embed"""
+        embed = discord.Embed(
+            title="📚 Timekeeper Help Center",
+            description="Welcome to Timekeeper V2! Select a category below to learn more.\n\n"
+                       "**Quick Start:** Use `/guide` for a step-by-step tutorial\n"
+                       "**Need Help?** Use `/support` to contact the developer",
+            color=discord.Color.blue()
+        )
+        
+        # Command categories
+        embed.add_field(
+            name="⏰ Time Tracking Commands",
+            value="• `/clockin` - Start tracking time\n"
+                  "• `/clockout` - Stop tracking time\n"
+                  "• `/status` - View your current status\n"
+                  "• `/dashboard` - Interactive dashboard",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="📊 Analytics & Insights",
+            value="• `/leaderboard` - Server rankings\n"
+                  "• `/insights` - Advanced productivity analytics\n"
+                  "• `/export` - Export your data",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="👑 Admin Commands (Administrators Only)",
+            value="• `/admin categories` - Manage categories\n"
+                  "• `/admin system` - View system status\n"
+                  "• `/config` - Server configuration\n"
+                  "• `/activitylog` - Configure activity logging",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🎯 Other Commands",
+            value="• `/whoclocked` - See who's currently tracking\n"
+                  "• `/forceclockout` - Force clock out a user (Admin)\n"
+                  "• `/guide` - Getting started guide\n"
+                  "• `/support` - Contact support",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🔗 Quick Links",
+            value="• [Documentation](https://timekeeper.404connernotfound.dev)\n"
+                  "• [Support Server](https://discord.gg/timekeeper)\n"
+                  "• [Website](https://timekeeper.404connernotfound.dev)",
+            inline=False
+        )
+        
+        embed.set_footer(text="Use the buttons below to navigate • /help <category> for details")
+        
+        return embed
+    
+    async def _create_category_help(self, category: str) -> discord.Embed:
+        """Create detailed help for specific category"""
+        
+        if category == "tracking":
             embed = discord.Embed(
-                title="📋 Server Categories",
+                title="⏰ Time Tracking Commands",
+                description="Learn how to track your time efficiently with Timekeeper",
+                color=discord.Color.green()
+            )
+            
+            embed.add_field(
+                name="/clockin <category>",
+                value="**Start tracking time in a category**\n"
+                      "• Example: `/clockin work`\n"
+                      "• Categories must be set up by server admins first\n"
+                      "• You'll receive a role while clocked in\n"
+                      "• Only one active session at a time",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="/clockout",
+                value="**Stop tracking time**\n"
+                      "• Saves your session duration\n"
+                      "• Removes your tracking role\n"
+                      "• Updates your statistics\n"
+                      "• Shows session summary",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="/status",
+                value="**View your tracking status**\n"
+                      "• Shows if you're currently clocked in\n"
+                      "• Displays total time tracked\n"
+                      "• Category breakdown with percentages\n"
+                      "• Recent activity and achievements",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="/dashboard [personal:True/False]",
+                value="**Interactive control panel**\n"
+                      "• `personal:False` - Shared dashboard (default)\n"
+                      "• `personal:True` - Private ephemeral dashboard\n"
+                      "• Quick buttons for all actions\n"
+                      "• Real-time server statistics",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="💡 Pro Tips",
+                value="• Clock in as soon as you start working\n"
+                      "• Use descriptive categories for better insights\n"
+                      "• Check your status regularly to track progress\n"
+                      "• Sessions over 2 hours show 'deep work' achievements",
+                inline=False
+            )
+        
+        elif category == "analytics":
+            embed = discord.Embed(
+                title="📊 Analytics & Insights",
+                description="Understand your productivity with advanced analytics",
+                color=discord.Color.purple()
+            )
+            
+            embed.add_field(
+                name="/leaderboard [category] [timeframe]",
+                value="**Server rankings and competition**\n"
+                      "• View top contributors\n"
+                      "• Filter by category (optional)\n"
+                      "• Time periods: All Time, Week, Month\n"
+                      "• Shows productivity scores (Premium)",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="/insights [user]",
+                value="**Advanced productivity analytics**\n"
+                      "• Productivity score (0-100)\n"
+                      "• Activity streak tracking\n"
+                      "• Category breakdown with trends\n"
+                      "• Personalized recommendations\n"
+                      "• Week-ahead predictions\n"
+                      "• Server ranking comparison",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="/export <format> [user]",
+                value="**Export your time data**\n"
+                      "• Formats: CSV, PDF, DOCX\n"
+                      "• Complete session history\n"
+                      "• Category summaries\n"
+                      "• Admin can export other users' data",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="📈 Understanding Your Score",
+                value="**Productivity Score Factors:**\n"
+                      "• Consistency (20%) - Regular work patterns\n"
+                      "• Balance (15%) - Healthy work-life mix\n"
+                      "• Time Patterns (15%) - Working optimal hours\n"
+                      "• Session Quality (15%) - Ideal session lengths\n"
+                      "• Volume (15%) - Appropriate work hours\n"
+                      "• Focus (10%) - Longer, deeper sessions\n"
+                      "• Trend (10%) - Improvement over time",
+                inline=False
+            )
+        
+        elif category == "admin":
+            embed = discord.Embed(
+                title="👑 Admin Commands",
+                description="Server management and configuration (Administrator permission required)",
+                color=discord.Color.gold()
+            )
+            
+            embed.add_field(
+                name="/admin categories",
+                value="**Manage time tracking categories**\n"
+                      "• `list` - View all categories\n"
+                      "• `add <name>` - Create new category\n"
+                      "• `remove <name>` - Delete category\n"
+                      "• Categories with data are archived, not deleted",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="/admin system",
+                value="**View system health and metrics**\n"
+                      "• System status and health score\n"
+                      "• Redis database status\n"
+                      "• Performance metrics\n"
+                      "• Cache hit rates\n"
+                      "• Session statistics",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="/config",
+                value="**Server configuration**\n"
+                      "• Manage categories\n"
+                      "• User permissions\n"
+                      "• Role requirements\n"
+                      "• Suspend/unsuspend users\n"
+                      "• Export server data\n"
+                      "• System enable/disable",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="/activitylog",
+                value="**Configure activity logging**\n"
+                      "• Set channel for clock in/out logs\n"
+                      "• Real-time activity feed\n"
+                      "• Track user engagement\n"
+                      "• Achievement notifications",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="/forceclockout <user> [reason]",
+                value="**Force clock out a user**\n"
+                      "• Emergency session termination\n"
+                      "• Saves session data\n"
+                      "• Logs action with reason\n"
+                      "• Notifies user",
+                inline=False
+            )
+        
+        elif category == "dashboard":
+            embed = discord.Embed(
+                title="🎯 Interactive Dashboard",
+                description="Master the dashboard for quick and efficient time tracking",
+                color=discord.Color.blurple()
+            )
+            
+            embed.add_field(
+                name="Dashboard Types",
+                value="**Shared Dashboard** (`/dashboard`)\n"
+                      "• Posted in channel for everyone\n"
+                      "• Auto-updates every 60 seconds\n"
+                      "• Persistent - no timeout\n"
+                      "• Shows real-time server stats\n\n"
+                      "**Personal Dashboard** (`/dashboard personal:True`)\n"
+                      "• Private - only you can see it\n"
+                      "• Ephemeral - disappears after 5 minutes\n"
+                      "• Customized to your data\n"
+                      "• No server stats",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="Dashboard Buttons",
+                value="⏰ **Clock In** - Opens modal to start tracking\n"
+                      "🛑 **Clock Out** - Stops your current session\n"
+                      "📊 **My Stats** - View your personal statistics\n"
+                      "🌐 **Server Total** - View server-wide stats\n"
+                      "👥 **Who's Clocked In** - See active users",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="Managing Dashboards",
+                value="**One per channel** - Only one shared dashboard per channel\n"
+                      "**Admin removal** - Use `/dashboard-remove` (Admin only)\n"
+                      "**Multiple personal** - Create as many as needed\n"
+                      "**Auto-cleanup** - Personal dashboards expire automatically",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="💡 Best Practices",
+                value="• Create one shared dashboard in a dedicated channel\n"
+                      "• Pin the dashboard message for easy access\n"
+                      "• Use personal dashboards for private checking\n"
+                      "• Check 'Who's Clocked In' for team awareness",
+                inline=False
+            )
+        
+        elif category == "export":
+            embed = discord.Embed(
+                title="📥 Export & Data Management",
+                description="Export and analyze your time tracking data",
+                color=discord.Color.orange()
+            )
+            
+            embed.add_field(
+                name="/export <format> [user]",
+                value="**Export your time data**\n\n"
+                      "**Formats:**\n"
+                      "• `CSV` - Spreadsheet compatible, best for analysis\n"
+                      "• `PDF` - Professional reports (HTML format)\n"
+                      "• `DOCX` - Text document (TXT format)\n\n"
+                      "**Contents:**\n"
+                      "• Complete session history\n"
+                      "• Category breakdown\n"
+                      "• Time summaries\n"
+                      "• Session metadata",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="Admin Features",
+                value="**Export Other Users** (Admin only)\n"
+                      "• Specify user parameter\n"
+                      "• Access to all user data\n"
+                      "• Bulk export capabilities\n"
+                      "• Server-wide reports",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="Data Privacy",
+                value="• Only you can export your own data\n"
+                      "• Admins can export any user's data\n"
+                      "• Exports are sent privately (ephemeral)\n"
+                      "• No data leaves Discord without your action",
+                inline=False
+            )
+        
+        elif category == "config":
+            embed = discord.Embed(
+                title="🔧 Configuration System",
+                description="Customize Timekeeper for your server",
+                color=discord.Color.dark_grey()
+            )
+            
+            embed.add_field(
+                name="Category Management",
+                value="**Setting Up Categories:**\n"
+                      "1. Use `/admin categories add <name>`\n"
+                      "2. Choose clear, descriptive names\n"
+                      "3. Examples: work, meetings, development, support\n"
+                      "4. Users can only track in configured categories",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="Permission System",
+                value="**User Access Control:**\n"
+                      "• Suspend users from tracking\n"
+                      "• Require specific roles\n"
+                      "• Enable/disable system server-wide\n"
+                      "• Admin roles configuration",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="Activity Logging",
+                value="**Track User Activity:**\n"
+                      "• Set logging channel with `/activitylog`\n"
+                      "• See all clock in/out events\n"
+                      "• Monitor user engagement\n"
+                      "• Achievement notifications",
+                inline=False
+            )
+        
+        embed.set_footer(text="Use /help to return to main menu")
+        return embed
+    
+    # ========================================================================
+    # GUIDE COMMAND - Step-by-Step Tutorial
+    # ========================================================================
+    
+    @app_commands.command(name="guide", description="📖 Step-by-step getting started guide")
+    async def guide_command(self, interaction: discord.Interaction):
+        """Interactive getting started guide"""
+        await interaction.response.defer()
+        
+        embed = discord.Embed(
+            title="📖 Timekeeper Getting Started Guide",
+            description="Welcome! Let's get you started with time tracking in just a few steps.",
+            color=discord.Color.green()
+        )
+        
+        # Step 1
+        embed.add_field(
+            name="📝 Step 1: Categories Setup (Admins Only)",
+            value="**Server administrators need to set up categories first.**\n"
+                  "```\n/admin categories add work```\n"
+                  "Suggested categories: `work`, `meetings`, `development`, `support`, `training`, `break`\n\n"
+                  "💡 Choose categories that match your team's activities!",
+            inline=False
+        )
+        
+        # Step 2
+        embed.add_field(
+            name="⏰ Step 2: Your First Clock In",
+            value="**Start tracking time in any configured category.**\n"
+                  "```\n/clockin work```\n"
+                  "• A role will be assigned to you\n"
+                  "• You'll see a confirmation message\n"
+                  "• You can only have one active session\n\n"
+                  "💡 Clock in as soon as you start working!",
+            inline=False
+        )
+        
+        # Step 3
+        embed.add_field(
+            name="📊 Step 3: Check Your Status",
+            value="**See your current tracking status anytime.**\n"
+                  "```\n/status```\n"
+                  "This shows:\n"
+                  "• Whether you're currently clocked in\n"
+                  "• Current session duration\n"
+                  "• Your total tracked time\n"
+                  "• Category breakdown\n\n"
+                  "💡 Check this regularly to stay aware of your time!",
+            inline=False
+        )
+        
+        # Step 4
+        embed.add_field(
+            name="🛑 Step 4: Clock Out When Done",
+            value="**Stop tracking when you finish.**\n"
+                  "```\n/clockout```\n"
+                  "• Saves your session\n"
+                  "• Removes your role\n"
+                  "• Shows session summary\n"
+                  "• Updates your stats\n\n"
+                  "💡 Don't forget to clock out at the end of your work!",
+            inline=False
+        )
+        
+        # Step 5
+        embed.add_field(
+            name="🎯 Step 5: Use the Dashboard (Optional)",
+            value="**Create an interactive control panel.**\n"
+                  "```\n/dashboard```\n"
+                  "• Quick-access buttons\n"
+                  "• Real-time server stats\n"
+                  "• See who's currently tracking\n"
+                  "• One command for everything\n\n"
+                  "💡 Pin the dashboard message for easy access!",
+            inline=False
+        )
+        
+        # Next Steps
+        embed.add_field(
+            name="🚀 Next Steps",
+            value="**Explore Advanced Features:**\n"
+                  "• `/leaderboard` - Compete with your team\n"
+                  "• `/insights` - View productivity analytics\n"
+                  "• `/export` - Download your data\n"
+                  "• `/help analytics` - Learn about insights\n\n"
+                  "**Need Help?**\n"
+                  "• `/help` - Full command reference\n"
+                  "• `/support` - Contact developer",
+            inline=False
+        )
+        
+        embed.set_footer(text="You're all set! Start tracking your time with /clockin")
+        
+        await interaction.followup.send(embed=embed)
+    
+    # ========================================================================
+    # SUPPORT COMMAND - Ticket System with Developer Proxy
+    # ========================================================================
+    
+    @app_commands.command(name="support", description="🆘 Contact the developer for help")
+    async def support_command(self, interaction: discord.Interaction):
+        """Open a support ticket"""
+        await interaction.response.send_modal(SupportTicketModal(self))
+    
+    async def create_ticket(self, user: discord.User, subject: str, message: str):
+        """Create a new support ticket"""
+        self.ticket_counter += 1
+        ticket_id = f"TK{self.ticket_counter:04d}"
+        
+        # Create ticket data
+        ticket_data = {
+            'id': ticket_id,
+            'user_id': user.id,
+            'username': str(user),
+            'subject': subject,
+            'status': 'open',
+            'created_at': datetime.now().isoformat(),
+            'messages': [
+                {
+                    'from': 'user',
+                    'content': message,
+                    'timestamp': datetime.now().isoformat()
+                }
+            ]
+        }
+        
+        self.active_tickets[user.id] = ticket_data
+        await self._save_tickets()
+        
+        # Send to developer
+        dev_id = int(os.getenv('DEV_USER_ID', 0))
+        if dev_id:
+            try:
+                developer = await self.bot.fetch_user(dev_id)
+                
+                embed = discord.Embed(
+                    title=f"🎫 New Support Ticket: {ticket_id}",
+                    description=f"**Subject:** {subject}",
+                    color=discord.Color.red()
+                )
+                
+                embed.add_field(
+                    name="👤 From",
+                    value=f"{user.mention} ({user.name})\nUser ID: `{user.id}`",
+                    inline=False
+                )
+                
+                embed.add_field(
+                    name="💬 Message",
+                    value=message[:1000],
+                    inline=False
+                )
+                
+                embed.add_field(
+                    name="📝 How to Respond",
+                    value=f"Reply using: `/ticket-reply {ticket_id} <message>`\n"
+                          f"Close ticket: `/ticket-close {ticket_id}`\n"
+                          f"View all: `/tickets`",
+                    inline=False
+                )
+                
+                embed.timestamp = datetime.now()
+                embed.set_footer(text=f"Ticket ID: {ticket_id}")
+                
+                await developer.send(embed=embed)
+                
+            except Exception as e:
+                logger.error(f"Send to dev failed: {e}")
+        
+        # Confirm to user
+        try:
+            embed = discord.Embed(
+                title="✅ Support Ticket Created",
+                description="Your ticket has been submitted successfully!",
+                color=discord.Color.green()
+            )
+            
+            embed.add_field(
+                name="🎫 Ticket ID",
+                value=f"`{ticket_id}`",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="📋 Subject",
+                value=subject,
+                inline=True
+            )
+            
+            embed.add_field(
+                name="💬 Your Message",
+                value=message[:500],
+                inline=False
+            )
+            
+            embed.add_field(
+                name="⏱️ What's Next?",
+                value="• The developer will be notified\n"
+                      "• You'll receive a DM when they respond\n"
+                      "• Use `/support` again to check status\n"
+                      "• Average response time: 24-48 hours",
+                inline=False
+            )
+            
+            embed.set_footer(text=f"Ticket ID: {ticket_id} • Created")
+            embed.timestamp = datetime.now()
+            
+            await user.send(embed=embed)
+            
+        except discord.Forbidden:
+            logger.warning(f"DM failed: user={user.id}")
+        
+        return ticket_id
+    
+    async def send_ticket_response(self, ticket_id: str, developer: discord.User, response_message: str):
+        """Developer responds to a ticket"""
+        # Find ticket
+        ticket_data = None
+        user_id = None
+        
+        for uid, ticket in self.active_tickets.items():
+            if ticket['id'] == ticket_id:
+                ticket_data = ticket
+                user_id = uid
+                break
+        
+        if not ticket_data:
+            return False, "Ticket not found"
+        
+        if ticket_data['status'] == 'closed':
+            return False, "Ticket is already closed"
+        
+        # Add response to ticket
+        ticket_data['messages'].append({
+            'from': 'developer',
+            'content': response_message,
+            'timestamp': datetime.now().isoformat()
+        })
+        
+        await self._save_tickets()
+        
+        # Send to user
+        try:
+            user = await self.bot.fetch_user(user_id)
+            
+            embed = discord.Embed(
+                title=f"💬 Developer Response - Ticket {ticket_id}",
+                description=f"**Subject:** {ticket_data['subject']}",
                 color=discord.Color.blue()
             )
             
-            category_list = "\n".join([f"• `{cat}`" for cat in sorted(categories)])
             embed.add_field(
-                name=f"Categories ({len(categories)})",
-                value=category_list,
+                name="👨‍💻 Developer says:",
+                value=response_message,
                 inline=False
             )
-        else:
-            embed = discord.Embed(
-                title="📋 No Categories",
-                description="No categories configured. Use `/config add_category` to add one.",
-                color=discord.Color.orange()
-            )
-        
-        await interaction.followup.send(embed=embed)
-
-    async def _handle_add_category(self, interaction: discord.Interaction, category: str):
-        """Add a new category"""
-        if not category:
-            await interaction.followup.send("❌ Please provide a category name!", ephemeral=True)
-            return
-        
-        try:
-            await self.tracker.add_category(interaction.guild.id, category)
             
-            embed = discord.Embed(
-                title="✅ Category Added",
-                description=f"Added category: `{category}`",
-                color=discord.Color.green()
+            embed.add_field(
+                name="💬 Reply",
+                value="Use `/support` to reply to this ticket",
+                inline=False
             )
-            await interaction.followup.send(embed=embed)
-            logger.info(f"Category added: {category}, guild={interaction.guild.id}")
+            
+            embed.timestamp = datetime.now()
+            embed.set_footer(text=f"Ticket ID: {ticket_id}")
+            
+            await user.send(embed=embed)
+            
+            return True, "Response sent successfully"
             
         except Exception as e:
-            await interaction.followup.send(f"❌ Failed to add category: {str(e)}", ephemeral=True)
-
-    async def _handle_remove_category(self, interaction: discord.Interaction, category: str):
-        """Remove a category"""
-        if not category:
-            await interaction.followup.send("❌ Please provide a category name!", ephemeral=True)
-            return
+            logger.error(f"Send response failed: {e}")
+            return False, f"Error: {str(e)}"
+    
+    async def close_ticket(self, ticket_id: str, reason: str = None):
+        """Close a support ticket"""
+        # Find ticket
+        ticket_data = None
+        user_id = None
         
-        # Confirmation view
-        view = ConfirmationView()
-        embed = discord.Embed(
-            title="⚠️ Confirm Category Removal",
-            description=f"Are you sure you want to remove the category `{category}`?\n\n**This will delete all user data for this category!**",
-            color=discord.Color.orange()
-        )
+        for uid, ticket in self.active_tickets.items():
+            if ticket['id'] == ticket_id:
+                ticket_data = ticket
+                user_id = uid
+                break
         
-        await interaction.followup.send(embed=embed, view=view)
-        await view.wait()
+        if not ticket_data:
+            return False, "Ticket not found"
         
-        if view.confirmed:
-            try:
-                await self.tracker.remove_category(interaction.guild.id, category, force=True)
-                
-                embed = discord.Embed(
-                    title="🗑️ Category Removed",
-                    description=f"Removed category: `{category}` and all associated data",
-                    color=discord.Color.green()
-                )
-                await interaction.edit_original_response(embed=embed, view=None)
-                logger.info(f"Category removed: {category}, guild={interaction.guild.id}")
-                
-            except Exception as e:
-                await interaction.edit_original_response(
-                    content=f"❌ Failed to remove category: {str(e)}", 
-                    embed=None, 
-                    view=None
-                )
-        else:
-            embed = discord.Embed(
-                title="❌ Cancelled",
-                description="Category removal cancelled.",
-                color=discord.Color.gray()
-            )
-            await interaction.edit_original_response(embed=embed, view=None)
-
-    # ========================================================================
-    # USER MANAGEMENT HANDLERS
-    # ========================================================================
-
-    async def _handle_user_stats(self, interaction: discord.Interaction, user: discord.Member):
-        """Show detailed user statistics"""
-        if not user:
-            await interaction.followup.send("❌ Please specify a user!", ephemeral=True)
-            return
+        # Update status
+        ticket_data['status'] = 'closed'
+        ticket_data['closed_at'] = datetime.now().isoformat()
+        ticket_data['close_reason'] = reason
         
-        user_stats = await self.tracker.get_user_times(
-            interaction.guild.id, 
-            user.id,
-            include_metadata=True
-        )
+        await self._save_tickets()
         
-        embed = discord.Embed(
-            title=f"📊 Stats for {user.display_name}",
-            color=discord.Color.blue(),
-            timestamp=datetime.now()
-        )
-        
-        embed.set_thumbnail(url=user.display_avatar.url)
-        
-        # Total time
-        total_time = user_stats.get('total', 0)
-        embed.add_field(
-            name="⏱️ Total Time",
-            value=user_stats.get('total_formatted', self.tracker._format_time(total_time)),
-            inline=True
-        )
-        
-        # Productivity score
-        analytics = user_stats.get('analytics', {})
-        if analytics and 'productivity_score' in analytics:
-            embed.add_field(
-                name="🎯 Productivity Score",
-                value=f"{analytics['productivity_score']}/100",
-                inline=True
-            )
-        
-        # Streak
-        if analytics and 'streak_days' in analytics:
-            embed.add_field(
-                name="🔥 Streak",
-                value=f"{analytics['streak_days']} days",
-                inline=True
-            )
-        
-        # Show top categories
-        categories = user_stats.get('categories', {})
-        if categories:
-            sorted_categories = sorted(
-                [(cat, data['seconds']) for cat, data in categories.items() if data['seconds'] > 0],
-                key=lambda x: x[1],
-                reverse=True
-            )[:5]
+        # Notify user
+        try:
+            user = await self.bot.fetch_user(user_id)
             
-            if sorted_categories:
-                category_text = "\n".join([
-                    f"`{cat}`: {self.tracker._format_time(time)}" 
-                    for cat, time in sorted_categories
-                ])
+            embed = discord.Embed(
+                title=f"🎫 Ticket Closed: {ticket_id}",
+                description="Your support ticket has been resolved.",
+                color=discord.Color.green()
+            )
+            
+            embed.add_field(
+                name="📋 Subject",
+                value=ticket_data['subject'],
+                inline=False
+            )
+            
+            if reason:
                 embed.add_field(
-                    name="🏆 Top Categories",
-                    value=category_text,
+                    name="✅ Resolution",
+                    value=reason,
                     inline=False
                 )
-        
-        # Check if user is suspended
-        permissions = await self._get_server_permissions(interaction.guild.id)
-        if user.id in permissions["suspended_users"]:
+            
             embed.add_field(
-                name="🚫 Status",
-                value="**SUSPENDED** - Cannot use time tracking",
+                name="💬 Need More Help?",
+                value="You can create a new ticket anytime with `/support`",
                 inline=False
             )
-        
-        await interaction.followup.send(embed=embed)
-
-    async def _handle_set_user_time(self, interaction: discord.Interaction, user: discord.Member, category: str, value: str):
-        """Set user's time for a category"""
-        if not user or not category or not value:
-            await interaction.followup.send("❌ Please provide user, category, and time value!\nExample: `/config set_user_time user:@john category:work value:2h30m`", ephemeral=True)
-            return
-        
-        try:
-            seconds = self._parse_time_string(value)
-            await self.tracker.set_user_time(interaction.guild.id, user.id, category, seconds)
             
-            embed = discord.Embed(
-                title="⏰ Time Set",
-                description=f"Set {user.mention}'s time in `{category}` to {self.tracker._format_time(seconds)}",
-                color=discord.Color.green()
-            )
-            await interaction.followup.send(embed=embed)
-            logger.info(f"Time set: user={user.id}, category={category}, seconds={seconds}")
+            embed.timestamp = datetime.now()
+            embed.set_footer(text=f"Ticket ID: {ticket_id} • Closed")
             
-        except ValueError as e:
-            await interaction.followup.send(f"❌ Invalid time format: {str(e)}\nUse format like: `2h30m`, `90m`, `3600s`", ephemeral=True)
+            await user.send(embed=embed)
+            
         except Exception as e:
-            await interaction.followup.send(f"❌ Failed to set time: {str(e)}", ephemeral=True)
-
-    async def _handle_add_user_time(self, interaction: discord.Interaction, user: discord.Member, category: str, value: str):
-        """Add time to user's category"""
-        if not user or not category or not value:
-            await interaction.followup.send("❌ Please provide user, category, and time value!", ephemeral=True)
+            logger.error(f"Notify close failed: {e}")
+        
+        return True, "Ticket closed successfully"
+    
+    # ========================================================================
+    # DEVELOPER COMMANDS (Hidden from normal users)
+    # ========================================================================
+    
+    @app_commands.command(name="ticket-reply", description="🔧 Reply to a support ticket (Dev only)")
+    @app_commands.describe(
+        ticket_id="Ticket ID (e.g., TK0001)",
+        message="Your response message"
+    )
+    async def ticket_reply(self, interaction: discord.Interaction, ticket_id: str, message: str):
+        """Developer replies to a ticket"""
+        dev_id = int(os.getenv('DEV_USER_ID', 0))
+        
+        if interaction.user.id != dev_id:
+            await interaction.response.send_message("❌ This command is developer-only.", ephemeral=True)
             return
         
-        try:
-            seconds = self._parse_time_string(value)
-            result = await self.tracker.add_time(interaction.guild.id, user.id, category, seconds)
-            
-            if not result.get('success', False):
-                await interaction.followup.send(f"❌ Failed to add time: {result.get('message', 'Unknown error')}", ephemeral=True)
-                return
-            
-            user_times = await self.tracker.get_user_times(interaction.guild.id, user.id)
-            category_data = user_times.get('categories', {}).get(category, {})
-            new_total = category_data.get('seconds', seconds)
-            
+        await interaction.response.defer(ephemeral=True)
+        
+        success, result = await self.send_ticket_response(ticket_id.upper(), interaction.user, message)
+        
+        if success:
             embed = discord.Embed(
-                title="➕ Time Added",
-                description=f"Added {self.tracker._format_time(seconds)} to {user.mention}'s `{category}`\n**New total:** {self.tracker._format_time(new_total)}",
+                title="✅ Response Sent",
+                description="Your response has been sent to the user.",
                 color=discord.Color.green()
             )
-            await interaction.followup.send(embed=embed)
-            logger.info(f"Time added: user={user.id}, category={category}, seconds={seconds}")
-            
-        except ValueError as e:
-            await interaction.followup.send(f"❌ Invalid time format: {str(e)}", ephemeral=True)
-        except Exception as e:
-            await interaction.followup.send(f"❌ Failed to add time: {str(e)}", ephemeral=True)
-
-    async def _handle_reset_user(self, interaction: discord.Interaction, user: discord.Member):
-        """Reset all user data"""
-        if not user:
-            await interaction.followup.send("❌ Please specify a user!", ephemeral=True)
-            return
-        
-        # Confirmation
-        view = ConfirmationView()
-        embed = discord.Embed(
-            title="⚠️ Confirm User Reset",
-            description=f"Are you sure you want to reset ALL time data for {user.mention}?\n\n**This action cannot be undone!**",
-            color=discord.Color.orange()
-        )
-        
-        await interaction.followup.send(embed=embed, view=view)
-        await view.wait()
-        
-        if view.confirmed:
-            try:
-                deleted = await self.tracker.delete_user(interaction.guild.id, user.id)
-                
-                if deleted:
-                    embed = discord.Embed(
-                        title="🔄 User Reset",
-                        description=f"Reset all time data for {user.mention}",
-                        color=discord.Color.green()
-                    )
-                else:
-                    embed = discord.Embed(
-                        title="ℹ️ No Data",
-                        description=f"{user.mention} had no time data to reset",
-                        color=discord.Color.blue()
-                    )
-                
-                await interaction.edit_original_response(embed=embed, view=None)
-                logger.info(f"User reset: user={user.id}, guild={interaction.guild.id}")
-                
-            except Exception as e:
-                await interaction.edit_original_response(
-                    content=f"❌ Failed to reset user: {str(e)}", 
-                    embed=None, 
-                    view=None
-                )
-
-    # ========================================================================
-    # PERMISSION HANDLERS
-    # ========================================================================
-
-    async def _handle_suspend_user(self, interaction: discord.Interaction, user: discord.Member):
-        """Suspend a user from time tracking"""
-        if not user:
-            await interaction.followup.send("❌ Please specify a user!", ephemeral=True)
-            return
-        
-        permissions = await self._get_server_permissions(interaction.guild.id)
-        
-        if user.id in permissions["suspended_users"]:
-            await interaction.followup.send(f"❌ {user.mention} is already suspended!", ephemeral=True)
-            return
-        
-        permissions["suspended_users"].append(user.id)
-        await self._save_server_permissions(interaction.guild.id, permissions)
-        
-        try:
-            await self.clock.clock_out(interaction.guild.id, user.id)
-        except:
-            pass
-        
-        embed = discord.Embed(
-            title="🚫 User Suspended",
-            description=f"{user.mention} has been suspended from time tracking",
-            color=discord.Color.red()
-        )
-        await interaction.followup.send(embed=embed)
-        logger.info(f"User suspended: user={user.id}, guild={interaction.guild.id}")
-
-    async def _handle_unsuspend_user(self, interaction: discord.Interaction, user: discord.Member):
-        """Unsuspend a user"""
-        if not user:
-            await interaction.followup.send("❌ Please specify a user!", ephemeral=True)
-            return
-        
-        permissions = await self._get_server_permissions(interaction.guild.id)
-        
-        if user.id not in permissions["suspended_users"]:
-            await interaction.followup.send(f"❌ {user.mention} is not suspended!", ephemeral=True)
-            return
-        
-        permissions["suspended_users"].remove(user.id)
-        await self._save_server_permissions(interaction.guild.id, permissions)
-        
-        embed = discord.Embed(
-            title="✅ User Unsuspended",
-            description=f"{user.mention} can now use time tracking again",
-            color=discord.Color.green()
-        )
-        await interaction.followup.send(embed=embed)
-        logger.info(f"User unsuspended: user={user.id}, guild={interaction.guild.id}")
-
-    async def _handle_set_role(self, interaction: discord.Interaction, role: discord.Role):
-        """Set required role for time tracking"""
-        if not role:
-            await interaction.followup.send("❌ Please specify a role!", ephemeral=True)
-            return
-        
-        permissions = await self._get_server_permissions(interaction.guild.id)
-        
-        if role.id in permissions["required_roles"]:
-            await interaction.followup.send(f"❌ {role.mention} is already a required role!", ephemeral=True)
-            return
-        
-        permissions["required_roles"].append(role.id)
-        await self._save_server_permissions(interaction.guild.id, permissions)
-        
-        embed = discord.Embed(
-            title="🔒 Required Role Set",
-            description=f"Users now need the {role.mention} role to use time tracking",
-            color=discord.Color.blue()
-        )
-        await interaction.followup.send(embed=embed)
-        logger.info(f"Required role set: role={role.id}, guild={interaction.guild.id}")
-
-    async def _handle_remove_role(self, interaction: discord.Interaction, role: discord.Role):
-        """Remove required role"""
-        if not role:
-            await interaction.followup.send("❌ Please specify a role!", ephemeral=True)
-            return
-        
-        permissions = await self._get_server_permissions(interaction.guild.id)
-        
-        if role.id not in permissions["required_roles"]:
-            await interaction.followup.send(f"❌ {role.mention} is not a required role!", ephemeral=True)
-            return
-        
-        permissions["required_roles"].remove(role.id)
-        await self._save_server_permissions(interaction.guild.id, permissions)
-        
-        embed = discord.Embed(
-            title="🔓 Required Role Removed",
-            description=f"Removed {role.mention} from required roles",
-            color=discord.Color.green()
-        )
-        await interaction.followup.send(embed=embed)
-
-    async def _handle_list_suspended(self, interaction: discord.Interaction):
-        """List suspended users"""
-        permissions = await self._get_server_permissions(interaction.guild.id)
-        
-        if not permissions["suspended_users"]:
-            embed = discord.Embed(
-                title="👥 No Suspended Users",
-                description="No users are currently suspended",
-                color=discord.Color.green()
-            )
+            embed.add_field(name="Ticket ID", value=ticket_id.upper(), inline=True)
+            embed.add_field(name="Message", value=message[:1000], inline=False)
         else:
             embed = discord.Embed(
-                title="🚫 Suspended Users",
+                title="❌ Error",
+                description=result,
                 color=discord.Color.red()
             )
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
+    
+    @app_commands.command(name="ticket-close", description="🔧 Close a support ticket (Dev only)")
+    @app_commands.describe(
+        ticket_id="Ticket ID (e.g., TK0001)",
+        reason="Reason for closing (optional)"
+    )
+    async def ticket_close(self, interaction: discord.Interaction, ticket_id: str, reason: Optional[str] = None):
+        """Developer closes a ticket"""
+        dev_id = int(os.getenv('DEV_USER_ID', 0))
+        
+        if interaction.user.id != dev_id:
+            await interaction.response.send_message("❌ This command is developer-only.", ephemeral=True)
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        success, result = await self.close_ticket(ticket_id.upper(), reason)
+        
+        if success:
+            embed = discord.Embed(
+                title="✅ Ticket Closed",
+                description=f"Ticket {ticket_id.upper()} has been closed.",
+                color=discord.Color.green()
+            )
+            if reason:
+                embed.add_field(name="Reason", value=reason, inline=False)
+        else:
+            embed = discord.Embed(
+                title="❌ Error",
+                description=result,
+                color=discord.Color.red()
+            )
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
+    
+    @app_commands.command(name="tickets", description="🔧 View all support tickets (Dev only)")
+    @app_commands.describe(
+        status="Filter by status"
+    )
+    @app_commands.choices(status=[
+        app_commands.Choice(name="Open", value="open"),
+        app_commands.Choice(name="Closed", value="closed"),
+        app_commands.Choice(name="All", value="all")
+    ])
+    async def tickets_list(self, interaction: discord.Interaction, status: str = "open"):
+        """Developer views all tickets"""
+        dev_id = int(os.getenv('DEV_USER_ID', 0))
+        
+        if interaction.user.id != dev_id:
+            await interaction.response.send_message("❌ This command is developer-only.", ephemeral=True)
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        # Filter tickets
+        filtered_tickets = []
+        for user_id, ticket in self.active_tickets.items():
+            if status == "all" or ticket['status'] == status:
+                filtered_tickets.append(ticket)
+        
+        if not filtered_tickets:
+            embed = discord.Embed(
+                title="📋 Support Tickets",
+                description=f"No {status} tickets found.",
+                color=discord.Color.blue()
+            )
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return
+        
+        # Create embeds (max 10 tickets per embed)
+        embed = discord.Embed(
+            title=f"📋 Support Tickets ({status.title()})",
+            description=f"Total: {len(filtered_tickets)} tickets",
+            color=discord.Color.blue()
+        )
+        
+        for ticket in filtered_tickets[:10]:
+            status_emoji = "🟢" if ticket['status'] == "open" else "⚫"
             
-            user_list = []
-            for user_id in permissions["suspended_users"]:
-                user = self.bot.get_user(user_id)
-                if user:
-                    user_list.append(f"• {user.mention} ({user.name})")
-                else:
-                    user_list.append(f"• Unknown User (ID: {user_id})")
+            value = f"**Subject:** {ticket['subject']}\n"
+            value += f"**User:** {ticket['username']} (`{ticket['user_id']}`)\n"
+            value += f"**Messages:** {len(ticket['messages'])}\n"
+            value += f"**Created:** {ticket['created_at'][:16]}\n"
+            
+            if ticket['status'] == 'closed':
+                value += f"**Closed:** {ticket.get('closed_at', 'Unknown')[:16]}"
             
             embed.add_field(
-                name=f"Suspended Users ({len(permissions['suspended_users'])})",
-                value="\n".join(user_list),
+                name=f"{status_emoji} {ticket['id']}",
+                value=value,
                 inline=False
             )
         
-        # Show role requirements
-        if permissions["required_roles"]:
-            role_list = []
-            for role_id in permissions["required_roles"]:
-                role = interaction.guild.get_role(role_id)
-                if role:
-                    role_list.append(f"• {role.mention}")
-                else:
-                    role_list.append(f"• Deleted Role (ID: {role_id})")
-            
-            embed.add_field(
-                name="🔒 Required Roles",
-                value="\n".join(role_list),
-                inline=False
-            )
+        if len(filtered_tickets) > 10:
+            embed.set_footer(text=f"Showing 10 of {len(filtered_tickets)} tickets")
         
-        await interaction.followup.send(embed=embed)
-
-    # [TRUNCATED - See full file for remaining handlers]
-    # Includes: _handle_server_stats, _handle_leaderboard, _handle_export, 
-    # _handle_system_status, _handle_toggle_system, _parse_time_string
-
-    async def cog_unload(self):
-        """Clean up when cog is unloaded"""
-        if self.tracker:
-            try:
-                await self.tracker.close()
-                logger.info("Config system closed")
-            except Exception as e:
-                logger.error(f"Close error: {e}")
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
 
-class ConfirmationView(discord.ui.View):
-    """Confirmation dialog for destructive operations"""
+class HelpNavigationView(discord.ui.View):
+    """Interactive navigation for help command"""
     
-    def __init__(self):
-        super().__init__(timeout=60)
-        self.confirmed = False
+    def __init__(self, cog):
+        super().__init__(timeout=180)
+        self.cog = cog
     
-    @discord.ui.button(label="✅ Confirm", style=discord.ButtonStyle.danger)
-    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.confirmed = True
-        self.stop()
+    @discord.ui.button(label="⏰ Time Tracking", style=discord.ButtonStyle.primary, custom_id="help_tracking")
+    async def tracking_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = await self.cog._create_category_help("tracking")
+        await interaction.response.edit_message(embed=embed, view=self)
     
-    @discord.ui.button(label="❌ Cancel", style=discord.ButtonStyle.secondary)
-    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.confirmed = False
-        self.stop()
+    @discord.ui.button(label="📊 Analytics", style=discord.ButtonStyle.primary, custom_id="help_analytics")
+    async def analytics_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = await self.cog._create_category_help("analytics")
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label="👑 Admin", style=discord.ButtonStyle.danger, custom_id="help_admin")
+    async def admin_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = await self.cog._create_category_help("admin")
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label="🎯 Dashboard", style=discord.ButtonStyle.success, custom_id="help_dashboard")
+    async def dashboard_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = await self.cog._create_category_help("dashboard")
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label="📥 Export", style=discord.ButtonStyle.secondary, custom_id="help_export")
+    async def export_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = await self.cog._create_category_help("export")
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label="🏠 Main Menu", style=discord.ButtonStyle.primary, custom_id="help_main", row=1)
+    async def main_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = await self.cog._create_main_help()
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label="📖 Getting Started", style=discord.ButtonStyle.success, custom_id="help_guide", row=1)
+    async def guide_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        
+        embed = discord.Embed(
+            title="📖 Quick Start Guide",
+            description="Use `/guide` for the full interactive getting started guide!",
+            color=discord.Color.green()
+        )
+        
+        embed.add_field(
+            name="Quick Steps",
+            value="1️⃣ Admins: Set up categories with `/admin categories add <n>`\n"
+                  "2️⃣ Users: Start tracking with `/clockin <category>`\n"
+                  "3️⃣ Check progress with `/status`\n"
+                  "4️⃣ Stop tracking with `/clockout`\n"
+                  "5️⃣ Create dashboard with `/dashboard`",
+            inline=False
+        )
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
 
-async def setup(bot: commands.Bot):
-    await bot.add_cog(TimeTrackerConfig(bot))
+class SupportTicketModal(discord.ui.Modal, title="Create Support Ticket"):
+    """Modal for creating support tickets"""
+    
+    subject = discord.ui.TextInput(
+        label="Subject",
+        placeholder="Brief description of your issue",
+        required=True,
+        max_length=100
+    )
+    
+    message = discord.ui.TextInput(
+        label="Message",
+        placeholder="Detailed description of your issue or question...",
+        required=True,
+        max_length=1000,
+        style=discord.TextStyle.paragraph
+    )
+    
+    def __init__(self, cog):
+        super().__init__()
+        self.cog = cog
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        
+        # Check if user already has an open ticket
+        if interaction.user.id in self.cog.active_tickets:
+            existing = self.cog.active_tickets[interaction.user.id]
+            if existing['status'] == 'open':
+                embed = discord.Embed(
+                    title="⚠️ Existing Ticket",
+                    description=f"You already have an open ticket: **{existing['id']}**",
+                    color=discord.Color.orange()
+                )
+                embed.add_field(
+                    name="Subject",
+                    value=existing['subject'],
+                    inline=False
+                )
+                embed.add_field(
+                    name="Status",
+                    value="Waiting for developer response",
+                    inline=False
+                )
+                await interaction.followup.send(embed=embed, ephemeral=True)
+                return
+        
+        # Create ticket
+        ticket_id = await self.cog.create_ticket(
+            interaction.user,
+            self.subject.value,
+            self.message.value
+        )
+        
+        embed = discord.Embed(
+            title="✅ Ticket Created",
+            description=f"Your support ticket **{ticket_id}** has been created successfully!",
+            color=discord.Color.green()
+        )
+        
+        embed.add_field(
+            name="📬 What's Next?",
+            value="You'll receive a DM when the developer responds.\n"
+                  "Average response time: 24-48 hours",
+            inline=False
+        )
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+
+async def setup(bot):
+    await bot.add_cog(HelpSupportCog(bot))
+    logger.info("HelpSupportCog loaded")
